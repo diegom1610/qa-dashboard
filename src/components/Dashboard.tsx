@@ -1,0 +1,265 @@
+/**
+ * DASHBOARD COMPONENT
+ *
+ * PURPOSE:
+ * Main application component that orchestrates all dashboard features.
+ *
+ * WHY SINGLE CONTAINER:
+ * - Manages global state (filters)
+ * - Coordinates data flow between components
+ * - Provides consistent layout and navigation
+ *
+ * ARCHITECTURE:
+ * Dashboard (state management)
+ *   ├── Header (logo, user info, logout)
+ *   ├── FilterBar (filter controls)
+ *   ├── MetricsGrid (summary KPIs)
+ *   └── ConversationTable (detailed data + feedback)
+ *       ├── FeedbackHistory (existing reviews)
+ *       └── FeedbackPanel (submit new review)
+ */
+
+import { useState } from 'react';
+import { LogOut, BarChart3, RefreshCw, Download, X } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { useMetrics } from '../hooks/useMetrics';
+import { useAgents } from '../hooks/useAgents';
+import { useFeedback } from '../hooks/useFeedback';
+import { FilterBar } from './FilterBar';
+import { MetricsGrid } from './MetricsGrid';
+import { ConversationTable } from './ConversationTable';
+import { ConversationViewer } from './ConversationViewer';
+import type { FilterState } from '../types/database';
+
+/**
+ * INITIAL FILTER STATE
+ *
+ * WHY DEFAULTS:
+ * Start with no filters applied - show all data by default.
+ * Users can then narrow down as needed.
+ */
+const initialFilters: FilterState = {
+  agentIds: [],
+  conversationId: '',
+  startDate: null,
+  endDate: null,
+  resolutionStatus: null,
+};
+
+/**
+ * DASHBOARD COMPONENT
+ */
+export function Dashboard() {
+  const [filters, setFilters] = useState<FilterState>(initialFilters);
+  const [syncing, setSyncing] = useState(false);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'table' | 'preview'>('table');
+  const { user, signOut } = useAuth();
+  const { agents, loading: agentsLoading } = useAgents(true);
+  const { metrics, loading: metricsLoading, error, refetch } = useMetrics(filters);
+  const { feedback: allFeedback } = useFeedback();
+
+  /**
+   * HANDLE GOOGLE SHEETS SYNC
+   */
+  const handleSync = async () => {
+    setSyncing(true);
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-google-sheets`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `Sync failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      alert(`Sync completed successfully!\n\nProcessed: ${result.processed || 0} rows\nInserted/Updated: ${result.inserted || 0} records`);
+
+      refetch();
+    } catch (error) {
+      console.error('Sync failed:', error);
+      alert(`Failed to sync Google Sheets:\n${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  /**
+   * HANDLE LOGOUT
+   *
+   * HOW IT WORKS:
+   * 1. Call signOut from AuthContext
+   * 2. AuthContext clears session
+   * 3. App.tsx detects no user, shows LoginPage
+   */
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Logout failed:', error);
+      alert('Failed to logout. Please try again.');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-between h-16">
+            {/* Logo and Title */}
+            <div className="flex items-center gap-3">
+              <div className="inline-flex items-center justify-center w-10 h-10 bg-blue-600 rounded-lg">
+                <BarChart3 className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-slate-900">
+                  QA Dashboard
+                </h1>
+                <p className="text-xs text-slate-600">
+                  Agent Performance Metrics
+                </p>
+              </div>
+            </div>
+
+            {/* User Menu */}
+            <div className="flex items-center gap-4">
+              {/* Sync Button */}
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-green-400 rounded-lg transition"
+                title="Sync data from Google Sheets"
+              >
+                <Download className={`w-4 h-4 ${syncing ? 'animate-bounce' : ''}`} />
+                <span className="hidden sm:inline">
+                  {syncing ? 'Syncing...' : 'Sync Sheets'}
+                </span>
+              </button>
+
+              {/* Refresh Button */}
+              <button
+                onClick={refetch}
+                className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
+                title="Refresh data"
+              >
+                <RefreshCw className="w-5 h-5" />
+              </button>
+
+              {/* User Info */}
+              <div className="hidden sm:block text-right">
+                <p className="text-sm font-medium text-slate-900">
+                  {user?.email}
+                </p>
+                <p className="text-xs text-slate-600">Reviewer</p>
+              </div>
+
+              {/* Logout Button */}
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+        {/* Filter Section */}
+        <FilterBar
+          filters={filters}
+          onFiltersChange={setFilters}
+          agents={agents}
+          agentsLoading={agentsLoading}
+        />
+
+        {/* Error State */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+            <p className="font-medium">Error loading data</p>
+            <p className="text-sm">{error}</p>
+          </div>
+        )}
+
+        {/* Metrics Grid */}
+        {!error && (
+          <>
+            <MetricsGrid metrics={metrics} allFeedback={allFeedback} />
+
+            <div className={`grid gap-6 ${selectedConversationId ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
+              <div className={selectedConversationId ? 'lg:col-span-1' : 'col-span-1'}>
+                <ConversationTable
+                  metrics={metrics}
+                  loading={metricsLoading}
+                  onViewConversation={(conversationId) => {
+                    setSelectedConversationId(conversationId);
+                  }}
+                  selectedConversationId={selectedConversationId}
+                />
+              </div>
+
+              {selectedConversationId && (
+                <div className="lg:col-span-1">
+                  <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden sticky top-24">
+                    <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
+                      <h2 className="text-lg font-semibold text-slate-900">
+                        Conversation Preview
+                      </h2>
+                      <button
+                        onClick={() => {
+                          setSelectedConversationId(null);
+                        }}
+                        className="flex items-center gap-2 px-3 py-1.5 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
+                      >
+                        <X className="w-4 h-4" />
+                        Close Preview
+                      </button>
+                    </div>
+                    <div className="h-[calc(100vh-200px)] max-h-[800px]">
+                      <ConversationViewer conversationId={selectedConversationId} />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer className="bg-white border-t border-slate-200 mt-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p className="text-sm text-slate-600">
+              QA Dashboard &copy; {new Date().getFullYear()}
+            </p>
+            <div className="flex items-center gap-4 text-sm text-slate-600">
+              <a href="#" className="hover:text-slate-900 transition">
+                Help
+              </a>
+              <span>•</span>
+              <a href="#" className="hover:text-slate-900 transition">
+                Documentation
+              </a>
+              <span>•</span>
+              <a href="#" className="hover:text-slate-900 transition">
+                Support
+              </a>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}
