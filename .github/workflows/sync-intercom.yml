@@ -1,0 +1,40 @@
+name: Sync Intercom Data to Supabase
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+  workflow_dispatch:  # Allows manual trigger from GitHub UI
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install supabase requests python-dotenv
+
+      - name: Sync Intercom conversations to Supabase
+        env:
+          INTERCOM_TOKEN: ${{ secrets.INTERCOM_TOKEN }}
+          INTERCOM_APP_ID: ${{ secrets.INTERCOM_APP_ID }}
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          python scripts/intercom/intercom_supabase_sync.py --days 1
+
+      - name: Report success
+        if: success()
+        run: echo "✅ Sync completed successfully!"
+
+      - name: Report failure
+        if: failure()
+        run: echo "❌ Sync failed. Check logs above."
