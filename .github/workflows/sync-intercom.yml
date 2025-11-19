@@ -10,26 +10,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
+      - name: Trigger Supabase Edge Function
         run: |
-          pip install supabase requests python-dotenv
-
-      - name: Sync Intercom conversations to Supabase
-        env:
-          INTERCOM_TOKEN: ${{ secrets.INTERCOM_TOKEN }}
-          INTERCOM_APP_ID: ${{ secrets.INTERCOM_APP_ID }}
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: |
-          python scripts/intercom/intercom_supabase_sync.py --days 1
+          curl -X POST '${{ secrets.VITE_SUPABASE_URL }}/functions/v1/sync-intercom-conversations' \
+            -H "Content-Type: application/json" \
+            -d '{"days": 1}' \
+            --fail-with-body
 
       - name: Report success
         if: success()
