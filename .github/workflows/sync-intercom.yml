@@ -11,9 +11,13 @@ jobs:
 
     steps:
       - name: Trigger Supabase Edge Function
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          curl -X POST '${{ secrets.VITE_SUPABASE_URL }}/functions/v1/sync-intercom-conversations' \
+          curl -X POST "${SUPABASE_URL}/functions/v1/sync-intercom-conversations" \
             -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
             -d '{"days": 1}' \
             --fail-with-body
 

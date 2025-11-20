@@ -52,13 +52,16 @@ If you want automated daily syncing via GitHub Actions:
 
 1. Go to your GitHub repository
 2. Click **Settings** → **Secrets and variables** → **Actions**
-3. Add this secret:
+3. Add these secrets:
    ```
-   Name: VITE_SUPABASE_URL
+   Name: SUPABASE_URL
    Value: https://cpmohzeoweeckkflspft.supabase.co
+
+   Name: SUPABASE_ANON_KEY
+   Value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwbW9oemVvd2VlY2trZmxzcGZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Mjk0NjU3NjYsImV4cCI6MjA0NTA0MTc2Nn0.MNfZXpmPaOg1IwK83L1HsFz6iMK3xw76pPqgP7rRbCM
    ```
 
-**That's it!** You don't need the service role key for GitHub Actions because the Edge Function handles authentication.
+**That's it!** The workflow uses the anon key (which is safe to commit) to authenticate with the Edge Function.
 
 ---
 
@@ -197,9 +200,13 @@ Or update the GitHub Actions workflow:
 
 ```yaml
 - name: Trigger Supabase Edge Function
+  env:
+    SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+    SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
   run: |
-    curl -X POST '${{ secrets.VITE_SUPABASE_URL }}/functions/v1/sync-intercom-conversations' \
+    curl -X POST "${SUPABASE_URL}/functions/v1/sync-intercom-conversations" \
       -H "Content-Type: application/json" \
+      -H "Authorization: Bearer ${SUPABASE_ANON_KEY}" \
       -d '{"days": 7}' \
       --fail-with-body
 ```
