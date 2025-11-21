@@ -91,6 +91,11 @@ Deno.serve(async (req: Request) => {
     const rows = await parseExportBytes(content);
     console.log(`Downloaded ${rows.length} rows`);
 
+    // Log first row for debugging
+    if (rows.length > 0) {
+      console.log("Sample row:", JSON.stringify(rows[0]));
+    }
+
     const conversations = rows
       .filter((row: ConversationRow) => row.conversation_id)
       .map((row: ConversationRow) => parseConversationRow(row, adminsMap));
@@ -369,10 +374,24 @@ function parseCSVLine(line: string): string[] {
 function parseConversationRow(row: ConversationRow, adminsMap: Record<string, string>) {
   const ts = row.conversation_last_closed_at || row.conversation_started_at || "";
   let metricDate: string;
-  try {
-    const tsNum = parseInt(ts);
-    metricDate = new Date(tsNum * 1000).toISOString().split("T")[0];
-  } catch {
+
+  // Parse timestamp - handle empty strings and invalid values
+  if (ts && ts.trim() !== "") {
+    try {
+      const tsNum = parseInt(ts.trim(), 10);
+      // Valid Unix timestamp should be > 1000000000 (after Sept 2001)
+      if (!isNaN(tsNum) && tsNum > 1000000000) {
+        metricDate = new Date(tsNum * 1000).toISOString().split("T")[0];
+      } else {
+        console.warn(`Invalid timestamp for conversation ${row.conversation_id}: ${ts}`);
+        metricDate = new Date().toISOString().split("T")[0];
+      }
+    } catch (e) {
+      console.warn(`Failed to parse timestamp for conversation ${row.conversation_id}: ${ts}`, e);
+      metricDate = new Date().toISOString().split("T")[0];
+    }
+  } else {
+    // No timestamp provided, use current date
     metricDate = new Date().toISOString().split("T")[0];
   }
 
