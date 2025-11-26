@@ -47,6 +47,8 @@ export function ConversationTable({ metrics, loading, onViewConversation, select
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [sortColumn, setSortColumn] = useState<keyof QAMetric>('metric_date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
 
   const { feedback: allFeedback } = useFeedback();
 
@@ -116,6 +118,29 @@ export function ConversationTable({ metrics, loading, onViewConversation, select
 
     return 0;
   });
+
+  /**
+   * PAGINATION
+   *
+   * WHY PAGINATION:
+   * Large datasets (100+ conversations) cause performance issues and poor UX.
+   * Paginating improves render performance and makes data easier to scan.
+   *
+   * HOW IT WORKS:
+   * 1. Calculate total pages based on metrics count
+   * 2. Slice the sorted array to show only current page
+   * 3. Provide controls to navigate between pages
+   */
+  const totalPages = Math.ceil(sortedMetrics.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedMetrics = sortedMetrics.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  const metricsLength = metrics.length;
+  if (currentPage > totalPages && totalPages > 0) {
+    setCurrentPage(1);
+  }
 
   /**
    * FORMAT DATE
@@ -251,7 +276,7 @@ export function ConversationTable({ metrics, loading, onViewConversation, select
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {sortedMetrics.map((metric) => {
+            {paginatedMetrics.map((metric) => {
               const isExpanded = expandedRows.has(metric.conversation_id);
               const isSelected = selectedConversationId === metric.conversation_id;
               const hasHumanFeedback = allFeedback.some(
@@ -414,13 +439,44 @@ export function ConversationTable({ metrics, loading, onViewConversation, select
         </table>
       </div>
 
-      {/* Footer with row count */}
-      <div className="bg-slate-50 border-t border-slate-200 px-4 py-3">
-        <p className="text-sm text-slate-600">
-          Showing {sortedMetrics.length} conversation
-          {sortedMetrics.length !== 1 ? 's' : ''}
-        </p>
-      </div>
+      {/* Pagination Footer */}
+      {totalPages > 1 && (
+        <div className="bg-slate-50 border-t border-slate-200 px-4 py-3 flex items-center justify-between">
+          <div className="text-sm text-slate-600">
+            Showing {startIndex + 1} to {Math.min(endIndex, sortedMetrics.length)} of{' '}
+            {sortedMetrics.length} conversation{sortedMetrics.length !== 1 ? 's' : ''}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+              className="px-3 py-1 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-slate-600">
+              Page {currentPage} of {totalPages}
+            </span>
+            <button
+              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+              disabled={currentPage === totalPages}
+              className="px-3 py-1 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Simple footer for single page */}
+      {totalPages <= 1 && (
+        <div className="bg-slate-50 border-t border-slate-200 px-4 py-3">
+          <p className="text-sm text-slate-600">
+            Showing {sortedMetrics.length} conversation
+            {sortedMetrics.length !== 1 ? 's' : ''}
+          </p>
+        </div>
+      )}
     </div>
   );
 }

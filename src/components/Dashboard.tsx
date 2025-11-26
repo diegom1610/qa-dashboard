@@ -32,17 +32,36 @@ import { ConversationViewer } from './ConversationViewer';
 import type { FilterState } from '../types/database';
 
 /**
+ * GET DEFAULT DATE RANGE
+ *
+ * WHY LAST 30 DAYS:
+ * Showing all historical data by default can be overwhelming and slow.
+ * Last 30 days provides relevant recent data while keeping queries fast.
+ *
+ * Users can still adjust the date range to see older data if needed.
+ */
+const getDefaultDateRange = () => {
+  const endDate = new Date();
+  const startDate = new Date();
+  startDate.setDate(startDate.getDate() - 30);
+
+  return {
+    startDate: startDate.toISOString().split('T')[0],
+    endDate: endDate.toISOString().split('T')[0],
+  };
+};
+
+/**
  * INITIAL FILTER STATE
  *
  * WHY DEFAULTS:
- * Start with no filters applied - show all data by default.
- * Users can then narrow down as needed.
+ * Start with last 30 days of data - show recent, relevant conversations.
+ * Users can adjust date range or clear filters to see more/less data.
  */
 const initialFilters: FilterState = {
   agentIds: [],
   conversationId: '',
-  startDate: null,
-  endDate: null,
+  ...getDefaultDateRange(),
   resolutionStatus: null,
 };
 
@@ -92,6 +111,41 @@ export function Dashboard() {
   };
 
   /**
+   * HANDLE INTERCOM SYNC
+   *
+   * Syncs last 30 days of Intercom conversations
+   */
+  const handleIntercomSync = async () => {
+    setSyncing(true);
+    try {
+      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-intercom-conversations`;
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ days: 30 }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || `Intercom sync failed: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      alert(`Intercom sync completed!\n\nProcessed: ${result.conversations_processed || 0} conversations`);
+
+      refetch();
+    } catch (error) {
+      console.error('Intercom sync failed:', error);
+      alert(`Failed to sync Intercom:\n${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  /**
    * HANDLE LOGOUT
    *
    * HOW IT WORKS:
@@ -131,7 +185,7 @@ export function Dashboard() {
 
             {/* User Menu */}
             <div className="flex items-center gap-4">
-              {/* Sync Button */}
+              {/* Sync Sheets Button */}
               <button
                 onClick={handleSync}
                 disabled={syncing}
@@ -141,6 +195,19 @@ export function Dashboard() {
                 <Download className={`w-4 h-4 ${syncing ? 'animate-bounce' : ''}`} />
                 <span className="hidden sm:inline">
                   {syncing ? 'Syncing...' : 'Sync Sheets'}
+                </span>
+              </button>
+
+              {/* Sync Intercom Button */}
+              <button
+                onClick={handleIntercomSync}
+                disabled={syncing}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded-lg transition"
+                title="Sync conversations from Intercom (30 days)"
+              >
+                <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
+                <span className="hidden sm:inline">
+                  {syncing ? 'Syncing...' : 'Sync Intercom'}
                 </span>
               </button>
 
