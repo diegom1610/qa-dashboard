@@ -91,7 +91,6 @@ Deno.serve(async (req: Request) => {
     const rows = await parseExportBytes(content);
     console.log(`Downloaded ${rows.length} rows`);
 
-    // Log first row for debugging
     if (rows.length > 0) {
       console.log("Sample row:", JSON.stringify(rows[0]));
     }
@@ -107,6 +106,32 @@ Deno.serve(async (req: Request) => {
 
     if (error) {
       throw new Error(`Failed to upsert: ${error.message}`);
+    }
+
+    const uniqueAgents = Array.from(
+      new Set(
+        conversations
+          .filter(c => c.agent_name && c.agent_name !== "Unknown" && c.agent_name !== "Unassigned")
+          .map(c => ({ agent_id: c.agent_id, agent_name: c.agent_name }))
+          .map(a => JSON.stringify(a))
+      )
+    ).map(s => JSON.parse(s));
+
+    if (uniqueAgents.length > 0) {
+      console.log(`Upserting ${uniqueAgents.length} agents...`);
+      const agentsToUpsert = uniqueAgents.map(agent => ({
+        agent_id: agent.agent_id,
+        agent_name: agent.agent_name,
+        active: true,
+      }));
+
+      const { error: agentsError } = await supabase
+        .from("agents")
+        .upsert(agentsToUpsert, { onConflict: "agent_id" });
+
+      if (agentsError) {
+        console.error("Failed to upsert agents:", agentsError);
+      }
     }
 
     console.log("✅ Sync complete!");
@@ -375,11 +400,9 @@ function parseConversationRow(row: ConversationRow, adminsMap: Record<string, st
   const ts = row.conversation_last_closed_at || row.conversation_started_at || "";
   let metricDate: string;
 
-  // Parse timestamp - handle empty strings and invalid values
   if (ts && ts.trim() !== "") {
     try {
       const tsNum = parseInt(ts.trim(), 10);
-      // Valid Unix timestamp should be > 1000000000 (after Sept 2001)
       if (!isNaN(tsNum) && tsNum > 1000000000) {
         metricDate = new Date(tsNum * 1000).toISOString().split("T")[0];
       } else {
@@ -391,7 +414,6 @@ function parseConversationRow(row: ConversationRow, adminsMap: Record<string, st
       metricDate = new Date().toISOString().split("T")[0];
     }
   } else {
-    // No timestamp provided, use current date
     metricDate = new Date().toISOString().split("T")[0];
   }
 
@@ -413,10 +435,10 @@ function parseConversationRow(row: ConversationRow, adminsMap: Record<string, st
   if (aiScoreRaw) {
     try {
       const scoreFloat = parseFloat(aiScoreRaw);
-      if (scoreFloat >= 0 && scoreFloat <= 100) {
-        aiScore = Math.round((1 + 4 * (scoreFloat / 100)) * 100) / 100;
-      } else if (scoreFloat >= 1 && scoreFloat <= 5) {
+      if (scoreFloat >= 1 && scoreFloat <= 5) {
         aiScore = Math.round(scoreFloat * 100) / 100;
+      } else if (scoreFloat >= 0 && scoreFloat <= 100) {
+        aiScore = Math.round((1 + 4 * (scoreFloat / 100)) * 100) / 100;
       }
     } catch {
       // Invalid score
@@ -446,6 +468,6 @@ function resolveAgentName(agentId: string, adminsMap: Record<string, string>): s
   if (!/^\d+$/.test(String(agentId).trim()) && !/^[0-9a-fA-F-]{8,}$/.test(String(agentId).trim())) {
     return agentId;
   }
-
+  
   return adminsMap[String(agentId)] || agentId;
 }
