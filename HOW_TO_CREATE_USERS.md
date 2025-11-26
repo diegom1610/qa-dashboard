@@ -40,7 +40,7 @@ If you prefer command line or need to automate user creation:
 ### For Mac/Linux:
 
 ```bash
-curl -X POST "https://ypkimqnjegqpiemjkmow.supabase.co/functions/v1/create-user" \
+curl -X POST "https://cpmohzeoweeckkflspft.supabase.co/functions/v1/create-user" \
   -H "Content-Type: application/json" \
   -d '{"email":"stakeholder@company.com","password":"TempPass123!"}'
 ```
@@ -53,7 +53,7 @@ $body = @{
     password = "TempPass123!"
 } | ConvertTo-Json
 
-Invoke-RestMethod -Uri "https://ypkimqnjegqpiemjkmow.supabase.co/functions/v1/create-user" `
+Invoke-RestMethod -Uri "https://cpmohzeoweeckkflspft.supabase.co/functions/v1/create-user" `
   -Method Post `
   -ContentType "application/json" `
   -Body $body
@@ -158,7 +158,7 @@ USERS=(
 )
 
 # Supabase Edge Function URL
-URL="https://ypkimqnjegqpiemjkmow.supabase.co/functions/v1/create-user"
+URL="https://cpmohzeoweeckkflspft.supabase.co/functions/v1/create-user"
 
 # Loop through users and create accounts
 for user in "${USERS[@]}"; do
@@ -271,14 +271,9 @@ ORDER BY created_at DESC;
 
 ---
 
-## Current Test Account
+## Creating Your First Test Account
 
-I already created one test account for you:
-
-**Email:** test@example.com
-**Password:** TestPassword123!
-
-You can use this to test the dashboard right now!
+After fixing the Supabase URL, create a test account using the HTML tool or command line to verify everything works correctly.
 
 ---
 
@@ -310,7 +305,7 @@ If you encounter any issues:
 
 **Command Line:**
 ```bash
-curl -X POST "https://ypkimqnjegqpiemjkmow.supabase.co/functions/v1/create-user" \
+curl -X POST "https://cpmohzeoweeckkflspft.supabase.co/functions/v1/create-user" \
   -H "Content-Type: application/json" \
   -d '{"email":"EMAIL","password":"PASSWORD"}'
 ```
