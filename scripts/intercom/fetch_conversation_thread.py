@@ -17,6 +17,11 @@ import logging
 import requests
 from datetime import datetime, timezone
 from supabase import create_client, Client
+from dotenv import load_dotenv
+import os
+load_dotenv()  # will load .env in current working directory
+print("INTERCOM_TOKEN in env:", bool(os.environ.get("INTERCOM_TOKEN")))
+
 
 # -----------------------------
 # Configuration

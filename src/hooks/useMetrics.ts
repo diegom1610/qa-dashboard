@@ -25,7 +25,12 @@ interface UseMetricsReturn {
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
+  hasMore: boolean;
+  loadMore: () => Promise<void>;
+  totalCount: number;
 }
+
+const PAGE_SIZE = 1000;
 
 /**
  * @param filters - Object containing filter criteria
@@ -44,6 +49,9 @@ export function useMetrics(filters: FilterState): UseMetricsReturn {
   const [metrics, setMetrics] = useState<QAMetric[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [totalCount, setTotalCount] = useState(0);
 
   /**
    * FETCH METRICS FUNCTION
@@ -58,23 +66,26 @@ export function useMetrics(filters: FilterState): UseMetricsReturn {
    * We only add filter conditions if the user actually selected something.
    * Empty filters mean "show everything".
    */
-  const fetchMetrics = async () => {
+  const fetchMetrics = async (pageNum: number = 0, append: boolean = false) => {
     try {
       setLoading(true);
       setError(null);
 
       /**
-       * BUILD QUERY
+       * BUILD QUERY WITH PAGINATION
        *
-       * WHY .from('qa_metrics').select('*'):
-       * - from: Specifies which table to query
-       * - select: Specifies which columns (* means all)
+       * WHY PAGINATION:
+       * - Prevents loading too much data at once (performance)
+       * - Allows incremental loading for better UX
+       * - Reduces memory usage in browser
        *
-       * WHY CHAIN METHODS:
-       * Each method returns a query builder, allowing fluent chaining.
-       * Only the final await() executes the query.
+       * WHY COUNT:
+       * - Knowing total count helps with "Load More" button state
+       * - Shows users how much data exists
        */
-      let query = supabase.from('qa_metrics').select('*');
+      let query = supabase
+        .from('qa_metrics')
+        .select('*', { count: 'exact' });
 
       /**
        * FILTER: Agent IDs
@@ -136,31 +147,45 @@ export function useMetrics(filters: FilterState): UseMetricsReturn {
       }
 
       /**
-       * ORDERING
+       * ORDERING AND PAGINATION
        *
        * WHY .order():
        * Sort results by date, newest first
        * SQL equivalent: ORDER BY metric_date DESC
        *
-       * WHY DESC:
-       * Users typically want to see recent conversations first
+       * WHY .range():
+       * Implements pagination by limiting results
+       * Example: page 0 = rows 0-999, page 1 = rows 1000-1999
        */
-      query = query.order('metric_date', { ascending: false });
+      query = query
+        .order('metric_date', { ascending: false })
+        .range(pageNum * PAGE_SIZE, (pageNum + 1) * PAGE_SIZE - 1);
 
       /**
        * EXECUTE QUERY
        *
-       * WHY DESTRUCTURE { data, error }:
-       * Supabase returns both successful data and errors in one response.
-       * We check error first, then use data.
+       * WHY DESTRUCTURE { data, error, count }:
+       * - data: The actual rows returned
+       * - error: Any errors that occurred
+       * - count: Total number of rows matching filters (for pagination)
        */
-      const { data, error: fetchError } = await query;
+      const { data, error: fetchError, count } = await query;
 
       if (fetchError) {
         throw new Error(fetchError.message);
       }
 
-      setMetrics(data || []);
+      const newData = data || [];
+
+      if (append) {
+        setMetrics(prev => [...prev, ...newData]);
+      } else {
+        setMetrics(newData);
+      }
+
+      setTotalCount(count || 0);
+      setHasMore(newData.length === PAGE_SIZE);
+      setPage(pageNum);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch metrics');
       console.error('Error fetching metrics:', err);
@@ -175,6 +200,18 @@ export function useMetrics(filters: FilterState): UseMetricsReturn {
   };
 
   /**
+   * LOAD MORE FUNCTION
+   *
+   * WHY:
+   * Allows users to load additional pages of data on demand.
+   * Called when user clicks "Load More" button.
+   */
+  const loadMore = async () => {
+    if (!hasMore || loading) return;
+    await fetchMetrics(page + 1, true);
+  };
+
+  /**
    * EFFECT: Fetch on mount and when filters change
    *
    * WHY useEffect:
@@ -184,12 +221,12 @@ export function useMetrics(filters: FilterState): UseMetricsReturn {
    * Re-run fetchMetrics whenever any filter value changes.
    * This keeps the displayed data in sync with selected filters.
    *
-   * WHY STRINGIFY:
-   * Objects are compared by reference, not value.
-   * Stringifying ensures we detect actual filter value changes.
+   * WHY RESET PAGE:
+   * When filters change, we start from page 0 again.
    */
   useEffect(() => {
-    fetchMetrics();
+    setPage(0);
+    fetchMetrics(0, false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     filters.agentIds.join(','),
@@ -250,6 +287,9 @@ export function useMetrics(filters: FilterState): UseMetricsReturn {
     metrics,
     loading,
     error,
-    refetch: fetchMetrics,
+    refetch: () => fetchMetrics(0, false),
+    hasMore,
+    loadMore,
+    totalCount,
   };
 }
