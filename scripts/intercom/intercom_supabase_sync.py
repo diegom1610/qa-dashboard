@@ -29,6 +29,20 @@ import argparse
 import requests
 from datetime import datetime, timezone, timedelta
 from supabase import create_client, Client
+from dotenv import load_dotenv
+import os
+print("SUPABASE_URL =", os.getenv("SUPABASE_URL"))
+print("SUPABASE_SERVICE_ROLE_KEY =", os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
+load_dotenv()  # will load .env in current working directory
+print("INTERCOM_TOKEN in env:", bool(os.environ.get("INTERCOM_TOKEN")))
+
+try:
+    # Load environment variables from a .env file if python-dotenv is installed.
+    # This keeps the script friendly for local runs where users place secrets in .env.
+    from dotenv import load_dotenv
+    load_dotenv()
+except Exception:
+    pass
 
 # -----------------------------
 # Configuration
