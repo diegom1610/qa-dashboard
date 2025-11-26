@@ -20,7 +20,7 @@
  */
 
 import { useState } from 'react';
-import { LogOut, BarChart3, RefreshCw, Download, X } from 'lucide-react';
+import { LogOut, BarChart3, RefreshCw, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useMetrics } from '../hooks/useMetrics';
 import { useAgents } from '../hooks/useAgents';
@@ -77,38 +77,6 @@ export function Dashboard() {
   const { agents, loading: agentsLoading } = useAgents(true);
   const { metrics, loading: metricsLoading, error, refetch } = useMetrics(filters);
   const { feedback: allFeedback } = useFeedback();
-
-  /**
-   * HANDLE GOOGLE SHEETS SYNC
-   */
-  const handleSync = async () => {
-    setSyncing(true);
-    try {
-      const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-google-sheets`;
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        throw new Error(errorData.error || `Sync failed: ${response.statusText}`);
-      }
-
-      const result = await response.json();
-      alert(`Sync completed successfully!\n\nProcessed: ${result.processed || 0} rows\nInserted/Updated: ${result.inserted || 0} records`);
-
-      refetch();
-    } catch (error) {
-      console.error('Sync failed:', error);
-      alert(`Failed to sync Google Sheets:\n${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setSyncing(false);
-    }
-  };
 
   /**
    * HANDLE INTERCOM SYNC
@@ -185,19 +153,6 @@ export function Dashboard() {
 
             {/* User Menu */}
             <div className="flex items-center gap-4">
-              {/* Sync Sheets Button */}
-              <button
-                onClick={handleSync}
-                disabled={syncing}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 disabled:bg-green-400 rounded-lg transition"
-                title="Sync data from Google Sheets"
-              >
-                <Download className={`w-4 h-4 ${syncing ? 'animate-bounce' : ''}`} />
-                <span className="hidden sm:inline">
-                  {syncing ? 'Syncing...' : 'Sync Sheets'}
-                </span>
-              </button>
-
               {/* Sync Intercom Button */}
               <button
                 onClick={handleIntercomSync}

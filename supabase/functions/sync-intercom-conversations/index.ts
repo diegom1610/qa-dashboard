@@ -396,25 +396,48 @@ function parseCSVLine(line: string): string[] {
   return result;
 }
 
+function extractDateFromConversationId(conversationId: string): string {
+  try {
+    const id = BigInt(conversationId);
+    const intercomEpoch = BigInt(1577836800000);
+    const timestampMs = (id >> BigInt(22)) + intercomEpoch;
+    const date = new Date(Number(timestampMs));
+
+    if (!isNaN(date.getTime())) {
+      const dateStr = date.toISOString().split("T")[0];
+      console.log(`Extracted date ${dateStr} from conversation ID ${conversationId}`);
+      return dateStr;
+    }
+  } catch (e) {
+    console.error(`Failed to extract date from conversation ID ${conversationId}:`, e);
+  }
+
+  return new Date().toISOString().split("T")[0];
+}
+
 function parseConversationRow(row: ConversationRow, adminsMap: Record<string, string>) {
   const ts = row.conversation_last_closed_at || row.conversation_started_at || "";
   let metricDate: string;
 
-  if (ts && ts.trim() !== "") {
+  console.log(`Parsing conversation ${row.conversation_id}: closed_at=${row.conversation_last_closed_at}, started_at=${row.conversation_started_at}`);
+
+  if (ts && ts.trim() !== "" && ts.trim() !== "0") {
     try {
       const tsNum = parseInt(ts.trim(), 10);
       if (!isNaN(tsNum) && tsNum > 1000000000) {
         metricDate = new Date(tsNum * 1000).toISOString().split("T")[0];
+        console.log(`Parsed timestamp ${tsNum} to date: ${metricDate}`);
       } else {
         console.warn(`Invalid timestamp for conversation ${row.conversation_id}: ${ts}`);
-        metricDate = new Date().toISOString().split("T")[0];
+        metricDate = extractDateFromConversationId(row.conversation_id || "");
       }
     } catch (e) {
       console.warn(`Failed to parse timestamp for conversation ${row.conversation_id}: ${ts}`, e);
-      metricDate = new Date().toISOString().split("T")[0];
+      metricDate = extractDateFromConversationId(row.conversation_id || "");
     }
   } else {
-    metricDate = new Date().toISOString().split("T")[0];
+    console.warn(`No timestamp found for conversation ${row.conversation_id}, extracting from ID`);
+    metricDate = extractDateFromConversationId(row.conversation_id || "");
   }
 
   const agentRaw =
