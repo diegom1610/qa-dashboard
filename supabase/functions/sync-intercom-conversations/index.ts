@@ -93,6 +93,10 @@ Deno.serve(async (req: Request) => {
 
     if (rows.length > 0) {
       console.log("Sample row:", JSON.stringify(rows[0]));
+      console.log("First 5 rows with timestamps:");
+      rows.slice(0, 5).forEach((row: ConversationRow) => {
+        console.log(`  ID: ${row.conversation_id}, closed_at: "${row.conversation_last_closed_at}", started_at: "${row.conversation_started_at}"`);
+      });
     }
 
     const conversations = rows
@@ -396,48 +400,27 @@ function parseCSVLine(line: string): string[] {
   return result;
 }
 
-function extractDateFromConversationId(conversationId: string): string {
-  try {
-    const id = BigInt(conversationId);
-    const intercomEpoch = BigInt(1577836800000);
-    const timestampMs = (id >> BigInt(22)) + intercomEpoch;
-    const date = new Date(Number(timestampMs));
-
-    if (!isNaN(date.getTime())) {
-      const dateStr = date.toISOString().split("T")[0];
-      console.log(`Extracted date ${dateStr} from conversation ID ${conversationId}`);
-      return dateStr;
-    }
-  } catch (e) {
-    console.error(`Failed to extract date from conversation ID ${conversationId}:`, e);
-  }
-
-  return new Date().toISOString().split("T")[0];
-}
 
 function parseConversationRow(row: ConversationRow, adminsMap: Record<string, string>) {
   const ts = row.conversation_last_closed_at || row.conversation_started_at || "";
   let metricDate: string;
-
-  console.log(`Parsing conversation ${row.conversation_id}: closed_at=${row.conversation_last_closed_at}, started_at=${row.conversation_started_at}`);
 
   if (ts && ts.trim() !== "" && ts.trim() !== "0") {
     try {
       const tsNum = parseInt(ts.trim(), 10);
       if (!isNaN(tsNum) && tsNum > 1000000000) {
         metricDate = new Date(tsNum * 1000).toISOString().split("T")[0];
-        console.log(`Parsed timestamp ${tsNum} to date: ${metricDate}`);
       } else {
-        console.warn(`Invalid timestamp for conversation ${row.conversation_id}: ${ts}`);
-        metricDate = extractDateFromConversationId(row.conversation_id || "");
+        console.warn(`Invalid timestamp ${ts} for conversation ${row.conversation_id}, using today`);
+        metricDate = new Date().toISOString().split("T")[0];
       }
     } catch (e) {
-      console.warn(`Failed to parse timestamp for conversation ${row.conversation_id}: ${ts}`, e);
-      metricDate = extractDateFromConversationId(row.conversation_id || "");
+      console.warn(`Failed to parse timestamp ${ts} for conversation ${row.conversation_id}`);
+      metricDate = new Date().toISOString().split("T")[0];
     }
   } else {
-    console.warn(`No timestamp found for conversation ${row.conversation_id}, extracting from ID`);
-    metricDate = extractDateFromConversationId(row.conversation_id || "");
+    console.warn(`No timestamp for conversation ${row.conversation_id}, using today`);
+    metricDate = new Date().toISOString().split("T")[0];
   }
 
   const agentRaw =
@@ -460,8 +443,6 @@ function parseConversationRow(row: ConversationRow, adminsMap: Record<string, st
       const scoreFloat = parseFloat(aiScoreRaw);
       if (scoreFloat >= 1 && scoreFloat <= 5) {
         aiScore = Math.round(scoreFloat * 100) / 100;
-      } else if (scoreFloat >= 0 && scoreFloat <= 100) {
-        aiScore = Math.round((1 + 4 * (scoreFloat / 100)) * 100) / 100;
       }
     } catch {
       // Invalid score

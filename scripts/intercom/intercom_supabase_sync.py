@@ -29,20 +29,6 @@ import argparse
 import requests
 from datetime import datetime, timezone, timedelta
 from supabase import create_client, Client
-from dotenv import load_dotenv
-import os
-print("SUPABASE_URL =", os.getenv("SUPABASE_URL"))
-print("SUPABASE_SERVICE_ROLE_KEY =", os.getenv("SUPABASE_SERVICE_ROLE_KEY"))
-load_dotenv()  # will load .env in current working directory
-print("INTERCOM_TOKEN in env:", bool(os.environ.get("INTERCOM_TOKEN")))
-
-try:
-    # Load environment variables from a .env file if python-dotenv is installed.
-    # This keeps the script friendly for local runs where users place secrets in .env.
-    from dotenv import load_dotenv
-    load_dotenv()
-except Exception:
-    pass
 
 # -----------------------------
 # Configuration
@@ -274,10 +260,12 @@ def parse_conversation_row(row: dict, admins_map: dict):
     if ai_score_raw:
         try:
             score_float = float(ai_score_raw)
-            if 0 <= score_float <= 100:
-                ai_score = round(1 + 4 * (score_float / 100.0), 2)
-            elif 1 <= score_float <= 5:
+            # Check 1-5 scale FIRST (Intercom's native rating scale)
+            if 1 <= score_float <= 5:
                 ai_score = round(score_float, 2)
+            # Only convert 0-100 if it's clearly a percentage (> 5)
+            elif 0 <= score_float <= 100:
+                ai_score = round(1 + 4 * (score_float / 100.0), 2)
         except Exception:
             pass
 
@@ -430,3 +418,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
