@@ -5,14 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Create User Account - QA Dashboard</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
             display: flex;
@@ -30,11 +26,7 @@
             padding: 40px;
         }
 
-        h1 {
-            color: #1a202c;
-            margin-bottom: 10px;
-            font-size: 28px;
-        }
+        h1 { color: #1a202c; margin-bottom: 10px; font-size: 28px; }
 
         .subtitle {
             color: #718096;
@@ -42,9 +34,7 @@
             font-size: 14px;
         }
 
-        .form-group {
-            margin-bottom: 20px;
-        }
+        .form-group { margin-bottom: 20px; }
 
         label {
             display: block;
@@ -60,20 +50,14 @@
             border: 2px solid #e2e8f0;
             border-radius: 8px;
             font-size: 14px;
-            transition: all 0.2s;
         }
 
         input:focus {
             outline: none;
             border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
-        .password-hint {
-            font-size: 12px;
-            color: #718096;
-            margin-top: 6px;
-        }
+        .password-hint { font-size: 12px; color: #718096; margin-top: 6px; }
 
         button {
             width: 100%;
@@ -85,17 +69,6 @@
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-        }
-
-        button:hover:not(:disabled) {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.4);
-        }
-
-        button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
         }
 
         .message {
@@ -106,41 +79,12 @@
             display: none;
         }
 
-        .message.success {
-            background: #c6f6d5;
-            border: 2px solid #48bb78;
-            color: #22543d;
-            display: block;
-        }
-
-        .message.error {
-            background: #fed7d7;
-            border: 2px solid #fc8181;
-            color: #742a2a;
-            display: block;
-        }
-
-        .user-details {
-            background: #f7fafc;
-            border-radius: 6px;
-            padding: 12px;
-            margin-top: 12px;
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-        }
-
-        .user-details div {
-            margin-bottom: 6px;
-        }
-
-        .user-details strong {
-            color: #2d3748;
-        }
+        .message.success { background: #c6f6d5; border: 2px solid #48bb78; color: #22543d; }
+        .message.error { background: #fed7d7; border: 2px solid #fc8181; color: #742a2a; }
 
         .loading {
             display: inline-block;
-            width: 16px;
-            height: 16px;
+            width: 16px; height: 16px;
             border: 3px solid rgba(255, 255, 255, 0.3);
             border-radius: 50%;
             border-top-color: white;
@@ -148,209 +92,86 @@
             margin-right: 8px;
         }
 
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .created-users {
-            margin-top: 30px;
-            padding-top: 30px;
-            border-top: 2px solid #e2e8f0;
-        }
-
-        .created-users h2 {
-            font-size: 18px;
-            color: #2d3748;
-            margin-bottom: 15px;
-        }
-
-        .user-item {
-            background: #f7fafc;
-            padding: 12px;
-            border-radius: 6px;
-            margin-bottom: 10px;
-            font-size: 14px;
-        }
-
-        .user-item strong {
-            color: #2d3748;
-        }
-
-        .copy-btn {
-            background: #4299e1;
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 4px;
-            font-size: 12px;
-            cursor: pointer;
-            margin-left: 10px;
-            transition: background 0.2s;
-        }
-
-        .copy-btn:hover {
-            background: #3182ce;
-        }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
+
 <body>
     <div class="container">
         <h1>Create User Account</h1>
-        <p class="subtitle">Create a new account for stakeholders to access the QA Dashboard</p>
+        <p class="subtitle">Create a new account for stakeholders</p>
 
         <form id="createUserForm">
             <div class="form-group">
-                <label for="email">Email Address</label>
-                <input
-                    type="email"
-                    id="email"
-                    name="email"
-                    placeholder="stakeholder@company.com"
-                    required
-                >
+                <label>Email Address</label>
+                <input type="email" id="email" required placeholder="stakeholder@company.com">
             </div>
 
             <div class="form-group">
-                <label for="password">Password</label>
-                <input
-                    type="password"
-                    id="password"
-                    name="password"
-                    placeholder="Enter secure password"
-                    minlength="6"
-                    required
-                >
-                <p class="password-hint">Minimum 6 characters. User can change this after first login.</p>
+                <label>Password</label>
+                <input type="password" id="password" required minlength="6" placeholder="Enter secure password">
+                <p class="password-hint">Minimum 6 characters.</p>
             </div>
 
-            <button type="submit" id="submitBtn">
-                Create User Account
-            </button>
+            <button type="submit" id="submitBtn">Create User Account</button>
         </form>
 
         <div id="message" class="message"></div>
-
-        <div id="createdUsers" class="created-users" style="display: none;">
-            <h2>Recently Created Users</h2>
-            <div id="usersList"></div>
-        </div>
     </div>
 
-    <script>
-        // Get Supabase URL from your .env file
-        // Replace this with your actual Supabase project URL
-        const SUPABASE_URL = 'https://cpmohzeoweeckkflspft.supabase.co';
-        const CREATE_USER_URL = 'https://qadashboard-eight.vercel.app/api/create-user';
+<script>
+    // ★★★★★ INSERT YOUR REAL SUPABASE ANON KEY HERE ★★★★★
+    const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwbW9oemVvd2VlY2trZmxzcGZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NzkxMjcsImV4cCI6MjA3ODU1NTEyN30.sdt2BPek_W0beLniM2CZmQTwMqksfYnRH4LwhF0Koc4";
 
-        const form = document.getElementById('createUserForm');
-        const messageDiv = document.getElementById('message');
-        const submitBtn = document.getElementById('submitBtn');
-        const createdUsersDiv = document.getElementById('createdUsers');
-        const usersListDiv = document.getElementById('usersList');
+    // This calls your Vercel function which will use the SERVICE ROLE KEY
+    const CREATE_USER_URL = "/api/create-user";
 
-        // Load previously created users from localStorage
-        let createdUsers = JSON.parse(localStorage.getItem('createdUsers') || '[]');
-        displayCreatedUsers();
+    const form = document.getElementById("createUserForm");
+    const messageDiv = document.getElementById("message");
+    const submitBtn = document.getElementById("submitBtn");
 
-        form.addEventListener('submit', async (e) => {
-            e.preventDefault();
+    form.addEventListener("submit", async (e) => {
+        e.preventDefault();
 
-            const email = document.getElementById('email').value;
-            const password = document.getElementById('password').value;
+        const email = document.getElementById("email").value;
+        const password = document.getElementById("password").value;
 
-            // Show loading state
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span class="loading"></span>Creating user...';
-            messageDiv.style.display = 'none';
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = `<span class="loading"></span>Creating user...`;
+        messageDiv.style.display = "none";
 
-            try {
-                const response = await fetch(CREATE_USER_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ email, password }),
-                });
-
-                const data = await response.json();
-
-                if (response.ok) {
-                    // Success
-                    messageDiv.className = 'message success';
-                    messageDiv.innerHTML = `
-                        <strong>✓ User Created Successfully!</strong>
-                        <div class="user-details">
-                            <div><strong>Email:</strong> ${email}</div>
-                            <div><strong>Password:</strong> ${password}</div>
-                            <div><strong>Created:</strong> ${new Date().toLocaleString()}</div>
-                        </div>
-                        <p style="margin-top: 10px;">Share these credentials with the user securely.</p>
-                    `;
-                    messageDiv.style.display = 'block';
-
-                    // Save to localStorage
-                    createdUsers.unshift({
-                        email,
-                        password,
-                        created_at: new Date().toISOString(),
-                    });
-                    localStorage.setItem('createdUsers', JSON.stringify(createdUsers.slice(0, 10))); // Keep last 10
-                    displayCreatedUsers();
-
-                    // Reset form
-                    form.reset();
-                } else {
-                    // Error
-                    messageDiv.className = 'message error';
-                    messageDiv.innerHTML = `
-                        <strong>✗ Error Creating User</strong>
-                        <p style="margin-top: 8px;">${data.message || data.error || 'Unknown error occurred'}</p>
-                    `;
-                    messageDiv.style.display = 'block';
-                }
-            } catch (error) {
-                messageDiv.className = 'message error';
-                messageDiv.innerHTML = `
-                    <strong>✗ Connection Error</strong>
-                    <p style="margin-top: 8px;">Could not connect to server. Check your internet connection and Supabase URL.</p>
-                    <p style="margin-top: 6px; font-size: 12px;">${error.message}</p>
-                `;
-                messageDiv.style.display = 'block';
-            } finally {
-                // Restore button
-                submitBtn.disabled = false;
-                submitBtn.innerHTML = 'Create User Account';
-            }
-        });
-
-        function displayCreatedUsers() {
-            if (createdUsers.length === 0) {
-                createdUsersDiv.style.display = 'none';
-                return;
-            }
-
-            createdUsersDiv.style.display = 'block';
-            usersListDiv.innerHTML = createdUsers.map((user, index) => `
-                <div class="user-item">
-                    <div><strong>Email:</strong> ${user.email}</div>
-                    <div><strong>Password:</strong> ${user.password}
-                        <button class="copy-btn" onclick="copyCredentials('${user.email}', '${user.password}')">Copy</button>
-                    </div>
-                    <div style="font-size: 12px; color: #718096; margin-top: 6px;">
-                        Created: ${new Date(user.created_at).toLocaleString()}
-                    </div>
-                </div>
-            `).join('');
-        }
-
-        function copyCredentials(email, password) {
-            const text = `Email: ${email}\\nPassword: ${password}`;
-            navigator.clipboard.writeText(text).then(() => {
-                alert('Credentials copied to clipboard!');
-            }).catch(() => {
-                alert('Could not copy. Please copy manually.');
+        try {
+            const response = await fetch(CREATE_USER_URL, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "x-client-key": supabaseAnonKey
+                },
+                body: JSON.stringify({ email, password })
             });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                messageDiv.className = "message error";
+                messageDiv.innerHTML = `<strong>✗ Error:</strong> ${data.error || data.message}`;
+                messageDiv.style.display = "block";
+            } else {
+                messageDiv.className = "message success";
+                messageDiv.innerHTML = `<strong>✓ User created:</strong> ${email}`;
+                messageDiv.style.display = "block";
+                form.reset();
+            }
+        } catch (err) {
+            messageDiv.className = "message error";
+            messageDiv.innerHTML = `<strong>✗ Connection Error:</strong> ${err.message}`;
+            messageDiv.style.display = "block";
         }
-    </script>
+
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = "Create User Account";
+    });
+</script>
+
 </body>
 </html>
