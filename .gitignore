@@ -26,3 +26,4 @@ dist/
 node_modules/
 .env
 .env.local
+test_python_script.py
