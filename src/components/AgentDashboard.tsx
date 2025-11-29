@@ -35,7 +35,7 @@ export function AgentDashboard() {
 
   useEffect(() => {
     applyFilters();
-  }, [metrics, allFeedback, selectedWorkspace, selectedReviewer, selectedReviewee, selectedGroup, dateRange, customStartDate, customEndDate]);
+  }, [metrics, allFeedback, selectedWorkspace, selectedReviewer, selectedReviewee, selectedGroup, dateRange, customStartDate, customEndDate, showHumanReviewedOnly]);
 
   const getDateRange = (): { startDate: Date | null; endDate: Date | null } => {
     const now = new Date();
@@ -129,16 +129,7 @@ export function AgentDashboard() {
 
       const { data: metricsData, error: metricsError } = await supabase
         .from('qa_metrics')
-        .select(`
-          *,
-          human_feedback!conversation_id (
-            id,
-            rating,
-            feedback_text,
-            reviewer_name,
-            created_at
-          )
-        `)
+        .select('*')
         .order('metric_date', { ascending: false });
 
       if (metricsError) throw metricsError;
@@ -149,6 +140,12 @@ export function AgentDashboard() {
         .order('created_at', { ascending: false});
 
       if (feedbackError) throw feedbackError;
+
+      // Manually join human_feedback with metrics
+      const metricsWithFeedback = (metricsData || []).map(metric => ({
+        ...metric,
+        human_feedback: (feedbackData || []).filter(f => f.conversation_id === metric.conversation_id)
+      }));
 
       const { data: workspacesData, error: workspacesError } = await supabase
         .from('workspaces')
@@ -166,7 +163,7 @@ export function AgentDashboard() {
 
       if (groupsError) throw groupsError;
 
-      setMetrics(metricsData || []);
+      setMetrics(metricsWithFeedback);
       setAllFeedback(feedbackData || []);
       setWorkspaces(workspacesData || []);
       setGroups(groupsData || []);
