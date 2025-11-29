@@ -1,30 +1,43 @@
+import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+export async function POST(req) {
+  const json = await req.json();
+
+  const email = json.email;
+  const password = json.password;
+
+  if (!email || !password) {
+    return NextResponse.json({ error: "Missing fields" }, { status: 400 });
   }
 
-  const { email, password } = req.body;
+  // Read Supabase URL + admin token injected by Vercel
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseServiceToken = req.headers.get("x-vercel-supabase-token");
 
-  // Protect the route — require anon key
-  const clientKey = req.headers["x-client-key"];
-  if (!clientKey || clientKey !== process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-    return res.status(401).json({ error: "Unauthorized" });
+  if (!supabaseServiceToken) {
+    return NextResponse.json(
+      { error: "Missing admin token from Vercel" },
+      { status: 401 }
+    );
   }
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY // admin key
-  );
+  // Create Supabase client with admin token
+  const supabase = createClient(supabaseUrl, supabaseServiceToken);
 
+  // Create user
   const { data, error } = await supabase.auth.admin.createUser({
     email,
     password,
-    email_confirm: true,
+    email_confirm: true // Optional
   });
 
-  if (error) return res.status(400).json({ error: error.message });
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
 
-  return res.status(200).json({ user: data.user });
+  return NextResponse.json({
+    success: true,
+    user: data.user,
+  });
 }

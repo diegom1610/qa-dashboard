@@ -254,7 +254,9 @@ export interface Database {
  */
 
 export type Agent = Database['public']['Tables']['agents']['Row'];
-export type QAMetric = Database['public']['Tables']['qa_metrics']['Row'];
+export type QAMetric = Database['public']['Tables']['qa_metrics']['Row'] & {
+  human_feedback?: HumanFeedback[];
+};
 export type HumanFeedback = Database['public']['Tables']['human_feedback']['Row'];
 export type Workspace = Database['public']['Tables']['workspaces']['Row'];
 export type AgentGroup = Database['public']['Tables']['agent_groups']['Row'];

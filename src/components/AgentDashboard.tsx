@@ -25,6 +25,7 @@ export function AgentDashboard() {
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
+  const [showHumanReviewedOnly, setShowHumanReviewedOnly] = useState(false);
 
   const { user, signOut } = useAuth();
 
@@ -128,7 +129,16 @@ export function AgentDashboard() {
 
       const { data: metricsData, error: metricsError } = await supabase
         .from('qa_metrics')
-        .select('*')
+        .select(`
+          *,
+          human_feedback!conversation_id (
+            id,
+            rating,
+            feedback_text,
+            reviewer_name,
+            created_at
+          )
+        `)
         .order('metric_date', { ascending: false });
 
       if (metricsError) throw metricsError;
@@ -210,6 +220,13 @@ export function AgentDashboard() {
         .filter(f => f.reviewer_id === selectedReviewer)
         .map(f => f.conversation_id);
       filtered = filtered.filter(m => reviewedConversations.includes(m.conversation_id));
+    }
+
+    // Filter by human review status
+    if (showHumanReviewedOnly) {
+      filtered = filtered.filter(m => {
+        return m.human_feedback && m.human_feedback.length > 0;
+      });
     }
 
     setFilteredMetrics(filtered);
@@ -368,6 +385,19 @@ export function AgentDashboard() {
                 </option>
               ))}
             </select>
+
+            <div className="flex items-center space-x-2 px-3 py-2 bg-white rounded-lg border border-slate-300">
+              <input
+                type="checkbox"
+                id="humanReviewedOnly"
+                checked={showHumanReviewedOnly}
+                onChange={(e) => setShowHumanReviewedOnly(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              />
+              <label htmlFor="humanReviewedOnly" className="text-sm font-medium text-slate-700">
+                Human Reviewed Only
+              </label>
+            </div>
 
             <button
               onClick={resetFilters}

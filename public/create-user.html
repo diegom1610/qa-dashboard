@@ -122,11 +122,10 @@
 <script>
     const API_URL = 'https://qadashboard-eight.vercel.app/api/create-user';
 
+
     // ★★★★★ INSERT YOUR REAL SUPABASE ANON KEY HERE ★★★★★
     const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwbW9oemVvd2VlY2trZmxzcGZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NzkxMjcsImV4cCI6MjA3ODU1NTEyN30.sdt2BPek_W0beLniM2CZmQTwMqksfYnRH4LwhF0Koc4";
 
-    // This calls your Vercel function which will use the SERVICE ROLE KEY
-    const CREATE_USER_URL = "/api/create-user";
 
     const form = document.getElementById("createUserForm");
     const messageDiv = document.getElementById("message");
@@ -143,17 +142,15 @@
         messageDiv.style.display = "none";
 
         try {
-            const response = await fetch(CREATE_USER_URL, {
+            const response = await fetch(API_URL, {
                 method: "POST",
                 headers: {
-                    "Content-Type": "application/json",
-                    "x-client-key": supabaseAnonKey
+                    "Content-Type": "application/json"
                 },
                 body: JSON.stringify({ email, password })
             });
 
             const data = await response.json();
-
             if (!response.ok) {
                 messageDiv.className = "message error";
                 messageDiv.innerHTML = `<strong>✗ Error:</strong> ${data.error || data.message}`;

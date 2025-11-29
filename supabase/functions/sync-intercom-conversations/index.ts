@@ -103,6 +103,32 @@ Deno.serve(async (req: Request) => {
       .filter((row: ConversationRow) => row.conversation_id)
       .map((row: ConversationRow) => parseConversationRow(row, adminsMap));
 
+    // ENRICH CONVERSATIONS WITH MISSING TIMESTAMPS
+    console.log("Enriching conversations with missing timestamps...");
+    const today = new Date().toISOString().split("T")[0];
+    const conversationsToEnrich = conversations.filter(c => c.metric_date === today);
+
+    if (conversationsToEnrich.length > 0 && conversationsToEnrich.length < 50) {
+      console.log(`Found ${conversationsToEnrich.length} conversations to enrich`);
+
+      for (const conv of conversationsToEnrich) {
+        const realTimestamp = await enrichConversationWithTimestamp(
+          INTERCOM_TOKEN,
+          conv.conversation_id
+        );
+
+        if (realTimestamp) {
+          const realDate = new Date(realTimestamp * 1000).toISOString().split("T")[0];
+          conv.metric_date = realDate;
+          console.log(`✓ Enriched ${conv.conversation_id}: ${realDate}`);
+        }
+
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    } else if (conversationsToEnrich.length >= 50) {
+      console.log(`Too many conversations to enrich (${conversationsToEnrich.length}), skipping enrichment`);
+    }
+
     console.log(`Upserting ${conversations.length} conversations to Supabase...`);
     const { error } = await supabase
       .from("qa_metrics")
@@ -203,6 +229,35 @@ async function fetchAllAdmins(token: string): Promise<Record<string, string>> {
   }
 
   return adminsMap;
+}
+
+async function enrichConversationWithTimestamp(
+  token: string,
+  conversationId: string
+): Promise<number | null> {
+  try {
+    const response = await fetch(
+      `https://api.intercom.io/conversations/${conversationId}`,
+      {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/json",
+          "Intercom-Version": "2.14",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.warn(`Failed to fetch conversation ${conversationId}: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    return data.created_at || data.updated_at || null;
+  } catch (error) {
+    console.error(`Error fetching conversation ${conversationId}:`, error);
+    return null;
+  }
 }
 
 async function enqueueExport(
@@ -402,8 +457,8 @@ function parseCSVLine(line: string): string[] {
 
 
 function parseConversationRow(row: ConversationRow, adminsMap: Record<string, string>) {
-  const ts = row.conversation_last_closed_at || row.conversation_started_at || "";
   let metricDate: string;
+  const ts = row.conversation_last_closed_at || row.conversation_started_at || "";
 
   if (ts && ts.trim() !== "" && ts.trim() !== "0") {
     try {
@@ -411,15 +466,12 @@ function parseConversationRow(row: ConversationRow, adminsMap: Record<string, st
       if (!isNaN(tsNum) && tsNum > 1000000000) {
         metricDate = new Date(tsNum * 1000).toISOString().split("T")[0];
       } else {
-        console.warn(`Invalid timestamp ${ts} for conversation ${row.conversation_id}, using today`);
         metricDate = new Date().toISOString().split("T")[0];
       }
     } catch (e) {
-      console.warn(`Failed to parse timestamp ${ts} for conversation ${row.conversation_id}`);
       metricDate = new Date().toISOString().split("T")[0];
     }
   } else {
-    console.warn(`No timestamp for conversation ${row.conversation_id}, using today`);
     metricDate = new Date().toISOString().split("T")[0];
   }
 
