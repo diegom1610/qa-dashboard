@@ -222,7 +222,7 @@ export function AgentConversationsTable({ metrics, feedback }: AgentConversation
                   </td>
                   <td className="px-6 py-4">
                     <a
-                      href={`https://app.intercom.com/a/apps/${Deno.env.get('INTERCOM_APP_ID') || 'b37vb7kt'}/inbox/inbox/conversation/${metric.conversation_id}`}
+                      href={`https://app.intercom.com/a/apps/b37vb7kt/inbox/inbox/conversation/${metric.conversation_id}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
