@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import type { QAMetric, HumanFeedback, Workspace, AgentGroup } from '../types/database';
 import { AgentPerformanceStats } from './AgentPerformanceStats';
 import { AgentPerformanceTable } from './AgentPerformanceTable';
+import { AgentConversationsTable } from './AgentConversationsTable';
 
 type DateRangeType = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'last_7_days' | 'last_30_days' | 'last_90_days' | 'custom' | 'all';
 
@@ -538,6 +539,9 @@ export function AgentDashboard() {
           <>
             <AgentPerformanceStats metrics={filteredMetrics} feedback={allFeedback} />
             <AgentPerformanceTable metrics={filteredMetrics} feedback={allFeedback} />
+            <div className="mt-6"> 
+              <AgentConversationsTable metrics={filteredMetrics} feedback={allFeedback} />
+            </div>
           </>
         )}
       </main>
