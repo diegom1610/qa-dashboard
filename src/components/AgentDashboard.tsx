@@ -141,11 +141,24 @@ export function AgentDashboard() {
 
       if (feedbackError) throw feedbackError;
 
-      // Manually join human_feedback with metrics
-      const metricsWithFeedback = (metricsData || []).map(metric => ({
-        ...metric,
-        human_feedback: (feedbackData || []).filter(f => f.conversation_id === metric.conversation_id)
-      }));
+      // Manually join human_feedback with metrics AND UPDATE rating_source
+      const metricsWithFeedback = (metricsData || []).map(metric => {
+        const humanFeedback = (feedbackData || []).filter(f => f.conversation_id === metric.conversation_id);
+        
+        // UPDATE rating_source based on available feedback
+        let ratingSource = metric.rating_source || 'none';
+        if (humanFeedback.length > 0) {
+          ratingSource = metric.ai_score !== null ? 'both' : 'human';
+        } else if (metric.ai_score !== null) {
+          ratingSource = 'ai';
+        }
+        
+        return {
+          ...metric,
+          human_feedback: humanFeedback,
+          rating_source: ratingSource,
+        };
+      });
 
       const { data: workspacesData, error: workspacesError } = await supabase
         .from('workspaces')
@@ -178,6 +191,7 @@ export function AgentDashboard() {
   const applyFilters = async () => {
     let filtered = [...metrics];
 
+    // Apply date range filter
     const { startDate, endDate } = getDateRange();
     if (startDate && endDate) {
       filtered = filtered.filter(m => {
@@ -186,14 +200,17 @@ export function AgentDashboard() {
       });
     }
 
+    // Apply workspace filter
     if (selectedWorkspace !== 'all') {
       filtered = filtered.filter(m => m.workspace === selectedWorkspace);
     }
 
+    // Apply reviewee (agent) filter
     if (selectedReviewee !== 'all') {
       filtered = filtered.filter(m => m.agent_name === selectedReviewee);
     }
 
+    // Apply group filter
     if (selectedGroup !== 'all') {
       try {
         const { data: groupMappings } = await supabase
@@ -212,6 +229,7 @@ export function AgentDashboard() {
       }
     }
 
+    // Apply reviewer filter
     if (selectedReviewer !== 'all') {
       const reviewedConversations = allFeedback
         .filter(f => f.reviewer_id === selectedReviewer)
@@ -219,10 +237,11 @@ export function AgentDashboard() {
       filtered = filtered.filter(m => reviewedConversations.includes(m.conversation_id));
     }
 
-    // Filter by human review status
+    // UPDATED: Filter by human review status using rating_source
     if (showHumanReviewedOnly) {
       filtered = filtered.filter(m => {
-        return m.human_feedback && m.human_feedback.length > 0;
+        // Check if rating_source includes human feedback
+        return m.rating_source === 'human' || m.rating_source === 'both';
       });
     }
 

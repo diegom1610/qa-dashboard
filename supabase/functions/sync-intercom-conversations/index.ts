@@ -503,6 +503,13 @@ function parseConversationRow(row: ConversationRow, adminsMap: Record<string, st
 
   const aiExplanation = row.ai_cx_score_explanation || null;
 
+  // Determine rating source
+  let ratingSource: 'ai' | 'human' | 'both' | 'none' = 'none';
+  if (aiScore !== null) {
+    ratingSource = 'ai';
+  }
+  // Note: human feedback will be enriched later when joined with human_feedback table
+
   return {
     conversation_id: row.conversation_id,
     agent_id: agentRaw,
@@ -513,6 +520,7 @@ function parseConversationRow(row: ConversationRow, adminsMap: Record<string, st
     resolution_status: row.conversation_state || "completed",
     response_time_seconds: null,
     customer_satisfaction_score: null,
+    rating_source: ratingSource,
   };
 }
 
