@@ -256,6 +256,7 @@ export interface Database {
 export type Agent = Database['public']['Tables']['agents']['Row'];
 export type QAMetric = Database['public']['Tables']['qa_metrics']['Row'] & {
   human_feedback?: HumanFeedback[];
+  rating_source: 'ai' | 'human' | 'both' | 'none';
 };
 export type HumanFeedback = Database['public']['Tables']['human_feedback']['Row'];
 export type Workspace = Database['public']['Tables']['workspaces']['Row'];
