@@ -10,6 +10,7 @@ Features:
 - Supports bulk import of historical data
 - Resolves teammate IDs to friendly names
 - Auto-detects AI scores and explanations
+- FIXED: Properly handles millisecond vs second timestamps
 
 Usage:
   python intercom_supabase_sync.py --days 30  # Last 30 days
@@ -69,6 +70,83 @@ def anonymize_text(text: str) -> str:
     s = re.sub(r'(\+?\d[\d\-\s\(\)]{6,}\d)', '[REDACTED_PHONE]', s)
     s = re.sub(r'\s+', ' ', s).strip()
     return s
+
+# -----------------------------
+# FIXED: Timestamp Parsing
+# -----------------------------
+def parse_timestamp_to_date(ts: str) -> str | None:
+    """
+    FIXED: Parse timestamp from Intercom, handling both seconds and milliseconds.
+    
+    Intercom can return timestamps in different formats:
+    1. Unix seconds (e.g., 1731398400 = Nov 12, 2025)
+    2. Unix milliseconds (e.g., 1731398400000 = Nov 12, 2025)
+    3. ISO 8601 date strings (e.g., "2025-11-12T00:00:00Z")
+    
+    The key fix: Detect if timestamp is in milliseconds vs seconds
+    by checking the magnitude.
+    """
+    if not ts or str(ts).strip() == "" or str(ts).strip() == "0":
+        return None
+    
+    trimmed = str(ts).strip()
+    
+    # Try parsing as a number first (Unix timestamp)
+    try:
+        ts_num = float(trimmed)
+        
+        if ts_num <= 0:
+            return None
+        
+        # Threshold to distinguish seconds from milliseconds
+        # Unix seconds for year 2286 = ~10 billion
+        # If number > 10 billion, it's in milliseconds
+        SECONDS_THRESHOLD = 10_000_000_000  # 10 billion
+        
+        if ts_num > SECONDS_THRESHOLD:
+            # This is in milliseconds
+            date_obj = datetime.fromtimestamp(ts_num / 1000, tz=timezone.utc)
+            logger.debug(f"Timestamp {ts} detected as MILLISECONDS -> {date_obj.isoformat()}")
+        elif ts_num > 1_000_000_000:
+            # This is in seconds (valid range for 2001-2286)
+            date_obj = datetime.fromtimestamp(ts_num, tz=timezone.utc)
+            logger.debug(f"Timestamp {ts} detected as SECONDS -> {date_obj.isoformat()}")
+        else:
+            # Too small to be a valid timestamp
+            logger.warning(f"Timestamp {ts} too small to be valid")
+            return None
+        
+        # Validate the resulting date is reasonable (between 2020 and 2030)
+        year = date_obj.year
+        if year < 2020 or year > 2030:
+            logger.warning(f"Parsed date {date_obj.isoformat()} has unexpected year {year}")
+        
+        return date_obj.date().isoformat()
+        
+    except (ValueError, TypeError, OSError):
+        pass
+    
+    # Try parsing as ISO date string or other date formats
+    try:
+        # Try ISO format
+        date_obj = datetime.fromisoformat(trimmed.replace('Z', '+00:00'))
+        logger.debug(f"Timestamp {ts} parsed as ISO string -> {date_obj.isoformat()}")
+        return date_obj.date().isoformat()
+    except (ValueError, TypeError):
+        pass
+    
+    # Try generic date parsing
+    try:
+        from dateutil import parser as dateutil_parser
+        date_obj = dateutil_parser.parse(trimmed)
+        logger.debug(f"Timestamp {ts} parsed with dateutil -> {date_obj.isoformat()}")
+        return date_obj.date().isoformat()
+    except Exception:
+        pass
+    
+    logger.warning(f"Could not parse timestamp: {ts}")
+    return None
+
 
 # -----------------------------
 # Intercom Export Helpers
@@ -223,18 +301,24 @@ def resolve_agent_name(agent_id: str, admins_map: dict) -> str:
     return admins_map.get(str(agent_id), agent_id)
 
 # -----------------------------
-# Parse Conversation Row
+# Parse Conversation Row (FIXED)
 # -----------------------------
 def parse_conversation_row(row: dict, admins_map: dict):
-    """Parse Intercom export row into qa_metrics format"""
+    """Parse Intercom export row into qa_metrics format - FIXED DATE PARSING"""
 
-    # Date
-    ts = row.get("conversation_last_closed_at") or row.get("conversation_started_at") or ""
-    metric_date = None
-    try:
-        ts_i = int(ts)
-        metric_date = datetime.fromtimestamp(ts_i, tz=timezone.utc).date().isoformat()
-    except Exception:
+    # FIXED: Use the new robust timestamp parser
+    closed_at = row.get("conversation_last_closed_at") or ""
+    started_at = row.get("conversation_started_at") or ""
+    
+    # Try closed_at first, then started_at
+    metric_date = parse_timestamp_to_date(closed_at)
+    
+    if not metric_date:
+        metric_date = parse_timestamp_to_date(started_at)
+    
+    # Fallback to today only if both timestamps fail
+    if not metric_date:
+        logger.warning(f"No valid timestamp for conversation {row.get('conversation_id')}, using today's date")
         metric_date = datetime.now(timezone.utc).date().isoformat()
 
     # Conversation ID
@@ -418,5 +502,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

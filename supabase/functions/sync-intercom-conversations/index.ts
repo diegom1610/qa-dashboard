@@ -455,23 +455,99 @@ function parseCSVLine(line: string): string[] {
   return result;
 }
 
+/**
+ * FIXED: parseTimestampToDate
+ * 
+ * Handles multiple timestamp formats from Intercom:
+ * 1. Unix seconds (e.g., 1731398400 = Nov 12, 2025)
+ * 2. Unix milliseconds (e.g., 1731398400000 = Nov 12, 2025)
+ * 3. ISO 8601 date strings (e.g., "2025-11-12T00:00:00Z")
+ * 4. Date strings in various formats
+ * 
+ * The key fix: Detect if timestamp is in milliseconds vs seconds
+ * by checking the magnitude. Unix seconds for dates in 2020-2030
+ * range are ~1.6-1.9 billion. Milliseconds would be ~1.6-1.9 trillion.
+ */
+function parseTimestampToDate(ts: string): string | null {
+  if (!ts || ts.trim() === "" || ts.trim() === "0") {
+    return null;
+  }
+
+  const trimmed = ts.trim();
+
+  // Try parsing as a number first (Unix timestamp)
+  const tsNum = Number(trimmed);
+  
+  if (!isNaN(tsNum) && tsNum > 0) {
+    // Determine if this is seconds or milliseconds
+    // Unix seconds for year 2000 = 946684800
+    // Unix seconds for year 2100 = 4102444800
+    // If the number is > 10 trillion, it's definitely milliseconds
+    // If the number is between 1 billion and 10 billion, it's likely seconds
+    // If the number is between 1 trillion and 10 trillion, it's likely milliseconds
+    
+    const SECONDS_THRESHOLD = 10_000_000_000; // 10 billion (year ~2286 in seconds)
+    
+    let dateMs: number;
+    
+    if (tsNum > SECONDS_THRESHOLD) {
+      // This is in milliseconds
+      dateMs = tsNum;
+      console.log(`Timestamp ${ts} detected as MILLISECONDS -> ${new Date(dateMs).toISOString()}`);
+    } else if (tsNum > 1_000_000_000) {
+      // This is in seconds (valid range for 2001-2286)
+      dateMs = tsNum * 1000;
+      console.log(`Timestamp ${ts} detected as SECONDS -> ${new Date(dateMs).toISOString()}`);
+    } else {
+      // Too small to be a valid timestamp
+      console.warn(`Timestamp ${ts} too small to be valid`);
+      return null;
+    }
+
+    // Validate the resulting date is reasonable (between 2020 and 2030)
+    const date = new Date(dateMs);
+    const year = date.getUTCFullYear();
+    
+    if (year >= 2020 && year <= 2030) {
+      return date.toISOString().split("T")[0];
+    } else {
+      console.warn(`Parsed date ${date.toISOString()} has unexpected year ${year}`);
+      // Still return it, but log the warning
+      return date.toISOString().split("T")[0];
+    }
+  }
+
+  // Try parsing as ISO date string or other date formats
+  try {
+    const date = new Date(trimmed);
+    if (!isNaN(date.getTime())) {
+      console.log(`Timestamp ${ts} parsed as date string -> ${date.toISOString()}`);
+      return date.toISOString().split("T")[0];
+    }
+  } catch {
+    // Not a valid date string
+  }
+
+  console.warn(`Could not parse timestamp: ${ts}`);
+  return null;
+}
+
 
 function parseConversationRow(row: ConversationRow, adminsMap: Record<string, string>) {
-  let metricDate: string;
-  const ts = row.conversation_last_closed_at || row.conversation_started_at || "";
-
-  if (ts && ts.trim() !== "" && ts.trim() !== "0") {
-    try {
-      const tsNum = parseInt(ts.trim(), 10);
-      if (!isNaN(tsNum) && tsNum > 1000000000) {
-        metricDate = new Date(tsNum * 1000).toISOString().split("T")[0];
-      } else {
-        metricDate = new Date().toISOString().split("T")[0];
-      }
-    } catch (e) {
-      metricDate = new Date().toISOString().split("T")[0];
-    }
-  } else {
+  // FIXED: Use the new robust timestamp parser
+  const closedAt = row.conversation_last_closed_at || "";
+  const startedAt = row.conversation_started_at || "";
+  
+  // Try closed_at first, then started_at
+  let metricDate = parseTimestampToDate(closedAt);
+  
+  if (!metricDate) {
+    metricDate = parseTimestampToDate(startedAt);
+  }
+  
+  // Fallback to today only if both timestamps fail
+  if (!metricDate) {
+    console.warn(`No valid timestamp for conversation ${row.conversation_id}, using today's date`);
     metricDate = new Date().toISOString().split("T")[0];
   }
 

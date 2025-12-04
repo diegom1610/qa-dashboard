@@ -4,9 +4,9 @@
  * PURPOSE:
  * Calculate weighted averages combining AI scores and human feedback ratings.
  *
- * WEIGHTING FORMULA:
- * - Human Feedback: 70% weight
- * - AI Score: 30% weight
+ * WEIGHTING FORMULA (UPDATED):
+ * - Human Feedback: 90% weight
+ * - AI Score: 10% weight
  *
  * EDGE CASES:
  * - Only AI score exists: Use 100% AI score
@@ -14,6 +14,10 @@
  * - Neither exists: Return null
  * - AI score is 0: Valid score, not missing data
  */
+
+// Weight constants - easily adjustable
+const HUMAN_WEIGHT = 0.90;  // 90% weight for human feedback
+const AI_WEIGHT = 0.10;     // 10% weight for AI score
 
 /**
  * Calculate weighted average score
@@ -23,8 +27,8 @@
  * @returns Weighted average score, or null if no data exists
  *
  * @example
- * // Both AI and human scores
- * calculateWeightedAverage([4, 5, 3], 4.5) // => 4.05 (70% of 4.0 + 30% of 4.5)
+ * // Both AI and human scores (90% human, 10% AI)
+ * calculateWeightedAverage([4, 5, 3], 4.5) // => 4.05 (90% of 4.0 + 10% of 4.5)
  *
  * @example
  * // Only human scores
@@ -50,22 +54,24 @@ export function calculateWeightedAverage(
     return null;
   }
 
-  // Only AI score
+  // Only AI score - use 100% AI
   if (!hasHumanScores && hasAiScore) {
     return aiScore;
   }
 
-  // Only human scores
+  // Only human scores - use 100% human average
   if (hasHumanScores && !hasAiScore) {
     const humanAverage =
       humanScores.reduce((sum, score) => sum + score, 0) / humanScores.length;
     return humanAverage;
   }
 
-  // Both AI and human scores - apply weighting
+  // Both AI and human scores - apply 90/10 weighting
   const humanAverage =
     humanScores.reduce((sum, score) => sum + score, 0) / humanScores.length;
-  const weightedScore = humanAverage * 0.7 + aiScore! * 0.3;
+  
+  // UPDATED: 90% human + 10% AI weighting
+  const weightedScore = humanAverage * HUMAN_WEIGHT + aiScore! * AI_WEIGHT;
 
   return weightedScore;
 }
@@ -132,4 +138,17 @@ export function calculateAgentAverages(
   }
 
   return agentAverages;
+}
+
+/**
+ * Get current weight configuration
+ * Useful for displaying in the UI
+ */
+export function getWeightConfiguration() {
+  return {
+    humanWeight: HUMAN_WEIGHT,
+    aiWeight: AI_WEIGHT,
+    humanPercentage: Math.round(HUMAN_WEIGHT * 100),
+    aiPercentage: Math.round(AI_WEIGHT * 100),
+  };
 }
