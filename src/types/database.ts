@@ -56,6 +56,10 @@ export interface Database {
           workspace: string | null;
           raw_data: any;
           synced_at: string;
+          // NEW: Fields for workspace and 360 queue filtering
+          tags: string[] | null;
+          is_360_queue: boolean;
+          queue_type_360: string | null;
         };
         Insert: {
           id?: string;
@@ -72,6 +76,10 @@ export interface Database {
           workspace?: string | null;
           raw_data?: any;
           synced_at?: string;
+          // NEW: Fields for workspace and 360 queue filtering
+          tags?: string[] | null;
+          is_360_queue?: boolean;
+          queue_type_360?: string | null;
         };
         Update: {
           id?: string;
@@ -88,6 +96,10 @@ export interface Database {
           workspace?: string | null;
           raw_data?: any;
           synced_at?: string;
+          // NEW: Fields for workspace and 360 queue filtering
+          tags?: string[] | null;
+          is_360_queue?: boolean;
+          queue_type_360?: string | null;
         };
       };
       workspaces: {

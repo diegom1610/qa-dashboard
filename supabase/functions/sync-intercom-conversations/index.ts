@@ -31,6 +31,80 @@ interface ConversationRow {
   [key: string]: string | undefined;
 }
 
+// ============================================
+// WORKSPACE & 360 QUEUE TAG DEFINITIONS
+// ============================================
+
+// Workspace tags - determines which workspace a conversation belongs to
+const WORKSPACE_TAGS = {
+  SKYPRIVATE: ['skyprivate', 'SkyPrivate'],
+  CMD: ['cmd', 'CMD', 'cammodeldirectory', 'CamModelDirectory'],
+};
+
+// 360 Queue tags - for filtering 360 view conversations
+const BILLING_360_TAGS = [
+  'payments',
+  'billing-verifications', 
+  'Billing - top-up-issue',
+  'billing',
+  'top-up',
+];
+
+const CEQ_360_TAGS = [
+  'reports',
+  'scammers',
+  'ceq-verifications',
+  'publicprofile',
+  'ceq',
+];
+
+// Combined 360 tags (for 360 view filter)
+const ALL_360_TAGS = [...BILLING_360_TAGS, ...CEQ_360_TAGS];
+
+/**
+ * Determine workspace from tags
+ */
+function determineWorkspace(tags: string[]): string {
+  const lowerTags = tags.map(t => t.toLowerCase());
+  
+  if (lowerTags.some(t => WORKSPACE_TAGS.SKYPRIVATE.map(w => w.toLowerCase()).includes(t))) {
+    return 'SkyPrivate';
+  }
+  if (lowerTags.some(t => WORKSPACE_TAGS.CMD.map(w => w.toLowerCase()).includes(t))) {
+    return 'CamModelDirectory';
+  }
+  return 'Unknown';
+}
+
+/**
+ * Determine if conversation is a 360 queue conversation
+ */
+function determine360Queue(tags: string[]): { is360: boolean; queueType: string | null } {
+  const lowerTags = tags.map(t => t.toLowerCase());
+  
+  const isBilling = lowerTags.some(t => 
+    BILLING_360_TAGS.map(bt => bt.toLowerCase()).includes(t)
+  );
+  
+  const isCEQ = lowerTags.some(t => 
+    CEQ_360_TAGS.map(ct => ct.toLowerCase()).includes(t)
+  );
+  
+  if (isBilling && isCEQ) {
+    return { is360: true, queueType: 'both' };
+  } else if (isBilling) {
+    return { is360: true, queueType: 'billing' };
+  } else if (isCEQ) {
+    return { is360: true, queueType: 'ceq' };
+  }
+  
+  return { is360: false, queueType: null };
+}
+
+// ============================================
+// MAIN HANDLER
+// ============================================
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 200, headers: corsHeaders });
@@ -93,40 +167,54 @@ Deno.serve(async (req: Request) => {
 
     if (rows.length > 0) {
       console.log("Sample row:", JSON.stringify(rows[0]));
-      console.log("First 5 rows with timestamps:");
-      rows.slice(0, 5).forEach((row: ConversationRow) => {
-        console.log(`  ID: ${row.conversation_id}, closed_at: "${row.conversation_last_closed_at}", started_at: "${row.conversation_started_at}"`);
-      });
     }
 
-    const conversations = rows
+    // Parse conversations with basic data first
+    let conversations = rows
       .filter((row: ConversationRow) => row.conversation_id)
       .map((row: ConversationRow) => parseConversationRow(row, adminsMap));
 
-    // ENRICH CONVERSATIONS WITH MISSING TIMESTAMPS
-    console.log("Enriching conversations with missing timestamps...");
-    const today = new Date().toISOString().split("T")[0];
-    const conversationsToEnrich = conversations.filter(c => c.metric_date === today);
-
-    if (conversationsToEnrich.length > 0 && conversationsToEnrich.length < 50) {
-      console.log(`Found ${conversationsToEnrich.length} conversations to enrich`);
-
-      for (const conv of conversationsToEnrich) {
-        const realTimestamp = await enrichConversationWithTimestamp(
+    // ============================================
+    // CRITICAL FIX: Enrich ALL conversations with real timestamps and tags
+    // The Intercom Reporting Export API often returns incorrect or missing dates
+    // We MUST fetch the actual conversation to get the real created_at date and tags
+    // ============================================
+    
+    console.log("Enriching ALL conversations with real timestamps and tags...");
+    
+    // Process in batches to avoid rate limiting
+    const BATCH_SIZE = 10;
+    const DELAY_BETWEEN_BATCHES = 500; // ms
+    
+    for (let i = 0; i < conversations.length; i += BATCH_SIZE) {
+      const batch = conversations.slice(i, i + BATCH_SIZE);
+      
+      await Promise.all(batch.map(async (conv) => {
+        const enrichedData = await enrichConversationWithDetails(
           INTERCOM_TOKEN,
           conv.conversation_id
         );
 
-        if (realTimestamp) {
-          const realDate = new Date(realTimestamp * 1000).toISOString().split("T")[0];
-          conv.metric_date = realDate;
-          console.log(`✓ Enriched ${conv.conversation_id}: ${realDate}`);
+        if (enrichedData) {
+          // Update date if we got a real one
+          if (enrichedData.realDate) {
+            conv.metric_date = enrichedData.realDate;
+          }
+          
+          // Add tags and workspace info
+          conv.tags = enrichedData.tags;
+          conv.workspace = enrichedData.workspace;
+          conv.is_360_queue = enrichedData.is360Queue;
+          conv.queue_type_360 = enrichedData.queueType360;
+          
+          console.log(`✓ Enriched ${conv.conversation_id}: ${conv.metric_date} | ${conv.workspace} | 360: ${conv.is_360_queue}`);
         }
-
-        await new Promise(resolve => setTimeout(resolve, 100));
+      }));
+      
+      // Delay between batches to respect rate limits
+      if (i + BATCH_SIZE < conversations.length) {
+        await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
       }
-    } else if (conversationsToEnrich.length >= 50) {
-      console.log(`Too many conversations to enrich (${conversationsToEnrich.length}), skipping enrichment`);
     }
 
     console.log(`Upserting ${conversations.length} conversations to Supabase...`);
@@ -138,6 +226,7 @@ Deno.serve(async (req: Request) => {
       throw new Error(`Failed to upsert: ${error.message}`);
     }
 
+    // Update agents table
     const uniqueAgents = Array.from(
       new Set(
         conversations
@@ -196,6 +285,116 @@ Deno.serve(async (req: Request) => {
   }
 });
 
+// ============================================
+// ENRICHMENT FUNCTION - Gets real date and tags
+// ============================================
+
+interface EnrichedConversationData {
+  realDate: string | null;
+  tags: string[];
+  workspace: string;
+  is360Queue: boolean;
+  queueType360: string | null;
+}
+
+async function enrichConversationWithDetails(
+  token: string,
+  conversationId: string
+): Promise<EnrichedConversationData | null> {
+  try {
+    const response = await fetch(
+      `https://api.intercom.io/conversations/${conversationId}`,
+      {
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/json",
+          "Intercom-Version": "2.14",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      console.warn(`Failed to fetch conversation ${conversationId}: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    
+    // Extract the REAL date - use created_at as primary, statistics.first_contact_reply_at as backup
+    let realDate: string | null = null;
+    
+    // Priority order for date:
+    // 1. created_at - when the conversation was created
+    // 2. statistics.first_contact_reply_at - first message timestamp
+    // 3. updated_at - last update (fallback)
+    
+    const createdAt = data.created_at;
+    const firstContactReply = data.statistics?.first_contact_reply_at;
+    const updatedAt = data.updated_at;
+    
+    const timestamp = createdAt || firstContactReply || updatedAt;
+    
+    if (timestamp) {
+      realDate = parseTimestampToDate(timestamp);
+    }
+    
+    // Extract tags
+    const tagsData = data.tags?.tags || [];
+    const tags: string[] = tagsData.map((tag: { name?: string }) => tag.name || '').filter(Boolean);
+    
+    // Determine workspace from tags
+    const workspace = determineWorkspace(tags);
+    
+    // Determine 360 queue status
+    const { is360, queueType } = determine360Queue(tags);
+    
+    return {
+      realDate,
+      tags,
+      workspace,
+      is360Queue: is360,
+      queueType360: queueType,
+    };
+  } catch (error) {
+    console.error(`Error fetching conversation ${conversationId}:`, error);
+    return null;
+  }
+}
+
+// ============================================
+// TIMESTAMP PARSING - Handles seconds and milliseconds
+// ============================================
+
+function parseTimestampToDate(ts: number | string): string | null {
+  if (!ts) return null;
+  
+  const tsNum = typeof ts === 'string' ? Number(ts) : ts;
+  
+  if (isNaN(tsNum) || tsNum <= 0) return null;
+  
+  // Threshold to distinguish seconds from milliseconds
+  const SECONDS_THRESHOLD = 10_000_000_000; // 10 billion
+  
+  let dateMs: number;
+  
+  if (tsNum > SECONDS_THRESHOLD) {
+    // This is in milliseconds
+    dateMs = tsNum;
+  } else if (tsNum > 1_000_000_000) {
+    // This is in seconds
+    dateMs = tsNum * 1000;
+  } else {
+    return null;
+  }
+  
+  const date = new Date(dateMs);
+  return date.toISOString().split("T")[0];
+}
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
 async function fetchAllAdmins(token: string): Promise<Record<string, string>> {
   const adminsMap: Record<string, string> = {};
   let url = "https://api.intercom.io/admins";
@@ -229,35 +428,6 @@ async function fetchAllAdmins(token: string): Promise<Record<string, string>> {
   }
 
   return adminsMap;
-}
-
-async function enrichConversationWithTimestamp(
-  token: string,
-  conversationId: string
-): Promise<number | null> {
-  try {
-    const response = await fetch(
-      `https://api.intercom.io/conversations/${conversationId}`,
-      {
-        headers: {
-          "Authorization": `Bearer ${token}`,
-          "Accept": "application/json",
-          "Intercom-Version": "2.14",
-        },
-      }
-    );
-
-    if (!response.ok) {
-      console.warn(`Failed to fetch conversation ${conversationId}: ${response.status}`);
-      return null;
-    }
-
-    const data = await response.json();
-    return data.created_at || data.updated_at || null;
-  } catch (error) {
-    console.error(`Error fetching conversation ${conversationId}:`, error);
-    return null;
-  }
 }
 
 async function enqueueExport(
@@ -455,99 +625,15 @@ function parseCSVLine(line: string): string[] {
   return result;
 }
 
-/**
- * FIXED: parseTimestampToDate
- * 
- * Handles multiple timestamp formats from Intercom:
- * 1. Unix seconds (e.g., 1731398400 = Nov 12, 2025)
- * 2. Unix milliseconds (e.g., 1731398400000 = Nov 12, 2025)
- * 3. ISO 8601 date strings (e.g., "2025-11-12T00:00:00Z")
- * 4. Date strings in various formats
- * 
- * The key fix: Detect if timestamp is in milliseconds vs seconds
- * by checking the magnitude. Unix seconds for dates in 2020-2030
- * range are ~1.6-1.9 billion. Milliseconds would be ~1.6-1.9 trillion.
- */
-function parseTimestampToDate(ts: string): string | null {
-  if (!ts || ts.trim() === "" || ts.trim() === "0") {
-    return null;
-  }
-
-  const trimmed = ts.trim();
-
-  // Try parsing as a number first (Unix timestamp)
-  const tsNum = Number(trimmed);
-  
-  if (!isNaN(tsNum) && tsNum > 0) {
-    // Determine if this is seconds or milliseconds
-    // Unix seconds for year 2000 = 946684800
-    // Unix seconds for year 2100 = 4102444800
-    // If the number is > 10 trillion, it's definitely milliseconds
-    // If the number is between 1 billion and 10 billion, it's likely seconds
-    // If the number is between 1 trillion and 10 trillion, it's likely milliseconds
-    
-    const SECONDS_THRESHOLD = 10_000_000_000; // 10 billion (year ~2286 in seconds)
-    
-    let dateMs: number;
-    
-    if (tsNum > SECONDS_THRESHOLD) {
-      // This is in milliseconds
-      dateMs = tsNum;
-      console.log(`Timestamp ${ts} detected as MILLISECONDS -> ${new Date(dateMs).toISOString()}`);
-    } else if (tsNum > 1_000_000_000) {
-      // This is in seconds (valid range for 2001-2286)
-      dateMs = tsNum * 1000;
-      console.log(`Timestamp ${ts} detected as SECONDS -> ${new Date(dateMs).toISOString()}`);
-    } else {
-      // Too small to be a valid timestamp
-      console.warn(`Timestamp ${ts} too small to be valid`);
-      return null;
-    }
-
-    // Validate the resulting date is reasonable (between 2020 and 2030)
-    const date = new Date(dateMs);
-    const year = date.getUTCFullYear();
-    
-    if (year >= 2020 && year <= 2030) {
-      return date.toISOString().split("T")[0];
-    } else {
-      console.warn(`Parsed date ${date.toISOString()} has unexpected year ${year}`);
-      // Still return it, but log the warning
-      return date.toISOString().split("T")[0];
-    }
-  }
-
-  // Try parsing as ISO date string or other date formats
-  try {
-    const date = new Date(trimmed);
-    if (!isNaN(date.getTime())) {
-      console.log(`Timestamp ${ts} parsed as date string -> ${date.toISOString()}`);
-      return date.toISOString().split("T")[0];
-    }
-  } catch {
-    // Not a valid date string
-  }
-
-  console.warn(`Could not parse timestamp: ${ts}`);
-  return null;
-}
-
-
 function parseConversationRow(row: ConversationRow, adminsMap: Record<string, string>) {
-  // FIXED: Use the new robust timestamp parser
-  const closedAt = row.conversation_last_closed_at || "";
-  const startedAt = row.conversation_started_at || "";
-  
-  // Try closed_at first, then started_at
-  let metricDate = parseTimestampToDate(closedAt);
-  
-  if (!metricDate) {
-    metricDate = parseTimestampToDate(startedAt);
-  }
-  
-  // Fallback to today only if both timestamps fail
-  if (!metricDate) {
-    console.warn(`No valid timestamp for conversation ${row.conversation_id}, using today's date`);
+  // Initial date parsing (will be overwritten by enrichment)
+  let metricDate: string;
+  const ts = row.conversation_last_closed_at || row.conversation_started_at || "";
+
+  if (ts && ts.trim() !== "" && ts.trim() !== "0") {
+    const parsed = parseTimestampToDate(ts.trim());
+    metricDate = parsed || new Date().toISOString().split("T")[0];
+  } else {
     metricDate = new Date().toISOString().split("T")[0];
   }
 
@@ -579,12 +665,10 @@ function parseConversationRow(row: ConversationRow, adminsMap: Record<string, st
 
   const aiExplanation = row.ai_cx_score_explanation || null;
 
-  // Determine rating source
   let ratingSource: 'ai' | 'human' | 'both' | 'none' = 'none';
   if (aiScore !== null) {
     ratingSource = 'ai';
   }
-  // Note: human feedback will be enriched later when joined with human_feedback table
 
   return {
     conversation_id: row.conversation_id,
@@ -597,6 +681,11 @@ function parseConversationRow(row: ConversationRow, adminsMap: Record<string, st
     response_time_seconds: null,
     customer_satisfaction_score: null,
     rating_source: ratingSource,
+    // These will be populated by enrichment
+    tags: [] as string[],
+    workspace: 'Unknown',
+    is_360_queue: false,
+    queue_type_360: null as string | null,
   };
 }
 

@@ -9,6 +9,32 @@ import { AgentConversationsTable } from './AgentConversationsTable';
 
 type DateRangeType = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'last_7_days' | 'last_30_days' | 'last_90_days' | 'custom' | 'all';
 
+// ============================================
+// WORKSPACE FILTER OPTIONS
+// ============================================
+
+// Define workspace filter options including 360 views
+type WorkspaceFilterType = 
+  | 'all' 
+  | 'SkyPrivate' 
+  | 'CamModelDirectory' 
+  | '360_SkyPrivate' 
+  | '360_CamModelDirectory';
+
+interface WorkspaceFilterOption {
+  value: WorkspaceFilterType;
+  label: string;
+  description?: string;
+}
+
+const WORKSPACE_FILTER_OPTIONS: WorkspaceFilterOption[] = [
+  { value: 'all', label: 'All Workspaces' },
+  { value: 'SkyPrivate', label: 'SkyPrivate' },
+  { value: 'CamModelDirectory', label: 'CamModelDirectory' },
+  { value: '360_SkyPrivate', label: '360 view - SkyPrivate conversations', description: 'Billing & CEQ queues' },
+  { value: '360_CamModelDirectory', label: '360 view - CamModelDirectory conversations', description: 'Billing & CEQ queues' },
+];
+
 export function AgentDashboard() {
   const [metrics, setMetrics] = useState<QAMetric[]>([]);
   const [filteredMetrics, setFilteredMetrics] = useState<QAMetric[]>([]);
@@ -18,7 +44,8 @@ export function AgentDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [selectedWorkspace, setSelectedWorkspace] = useState<string>('all');
+  // UPDATED: Use WorkspaceFilterType instead of string
+  const [selectedWorkspace, setSelectedWorkspace] = useState<WorkspaceFilterType>('all');
   const [selectedReviewer, setSelectedReviewer] = useState<string>('all');
   const [selectedReviewee, setSelectedReviewee] = useState<string>('all');
   const [selectedGroup, setSelectedGroup] = useState<string>('all');
@@ -128,6 +155,7 @@ export function AgentDashboard() {
       setLoading(true);
       setError(null);
 
+      // UPDATED: Fetch all columns including new workspace/360 fields
       const { data: metricsData, error: metricsError } = await supabase
         .from('qa_metrics')
         .select('*')
@@ -189,6 +217,9 @@ export function AgentDashboard() {
     }
   };
 
+  // ============================================
+  // UPDATED APPLY FILTERS WITH 360 QUEUE SUPPORT
+  // ============================================
   const applyFilters = async () => {
     let filtered = [...metrics];
 
@@ -201,9 +232,9 @@ export function AgentDashboard() {
       });
     }
 
-    // Apply workspace filter
+    // UPDATED: Apply workspace filter with 360 queue support
     if (selectedWorkspace !== 'all') {
-      filtered = filtered.filter(m => m.workspace === selectedWorkspace);
+      filtered = applyWorkspaceFilter(filtered, selectedWorkspace);
     }
 
     // Apply reviewee (agent) filter
@@ -247,6 +278,92 @@ export function AgentDashboard() {
     }
 
     setFilteredMetrics(filtered);
+  };
+
+  // ============================================
+  // NEW: Workspace Filter Logic
+  // ============================================
+  const applyWorkspaceFilter = (data: QAMetric[], filter: WorkspaceFilterType): QAMetric[] => {
+    switch (filter) {
+      case 'SkyPrivate':
+        // Filter by workspace column OR by tags containing SkyPrivate
+        return data.filter(m => {
+          const workspace = m.workspace?.toLowerCase() || '';
+          const tags = (m.tags || m.conversation_tags || []) as string[];
+          const tagsLower = tags.map(t => t.toLowerCase());
+          
+          return workspace === 'skyprivate' || 
+                 tagsLower.some(t => t === 'skyprivate' || t === '#skyprivate');
+        });
+
+      case 'CamModelDirectory':
+        // Filter by workspace column OR by tags containing CMD/CamModelDirectory
+        return data.filter(m => {
+          const workspace = m.workspace?.toLowerCase() || '';
+          const tags = (m.tags || m.conversation_tags || []) as string[];
+          const tagsLower = tags.map(t => t.toLowerCase());
+          
+          return workspace === 'cammodeldirectory' || 
+                 workspace === 'cmd' ||
+                 tagsLower.some(t => t === 'cmd' || t === '#cmd' || t === 'cammodeldirectory');
+        });
+
+      case '360_SkyPrivate':
+        // 360 view for SkyPrivate: must be SkyPrivate workspace AND have 360 queue tags
+        return data.filter(m => {
+          const workspace = m.workspace?.toLowerCase() || '';
+          const tags = (m.tags || m.conversation_tags || []) as string[];
+          const tagsLower = tags.map(t => t.toLowerCase());
+          
+          // Must be SkyPrivate workspace
+          const isSkyPrivate = workspace === 'skyprivate' || 
+                               tagsLower.some(t => t === 'skyprivate' || t === '#skyprivate');
+          
+          // Must have 360 queue tags (Billing OR CEQ)
+          const is360Queue = m.is_360_queue === true || has360Tags(tagsLower);
+          
+          return isSkyPrivate && is360Queue;
+        });
+
+      case '360_CamModelDirectory':
+        // 360 view for CamModelDirectory: must be CMD workspace AND have 360 queue tags
+        return data.filter(m => {
+          const workspace = m.workspace?.toLowerCase() || '';
+          const tags = (m.tags || m.conversation_tags || []) as string[];
+          const tagsLower = tags.map(t => t.toLowerCase());
+          
+          // Must be CamModelDirectory workspace
+          const isCMD = workspace === 'cammodeldirectory' || 
+                        workspace === 'cmd' ||
+                        tagsLower.some(t => t === 'cmd' || t === '#cmd' || t === 'cammodeldirectory');
+          
+          // Must have 360 queue tags (Billing OR CEQ)
+          const is360Queue = m.is_360_queue === true || has360Tags(tagsLower);
+          
+          return isCMD && is360Queue;
+        });
+
+      default:
+        return data;
+    }
+  };
+
+  // Helper function to check for 360 queue tags
+  const has360Tags = (tagsLower: string[]): boolean => {
+    // 360 Billing tags
+    const billingTags = ['payments', 'billing-verifications', 'billing - top-up-issue', 'billing', 'top-up', '#payments', '#billing'];
+    // 360 CEQ tags
+    const ceqTags = ['reports', 'scammers', 'ceq-verifications', 'publicprofile', 'ceq', '#reports', '#scammers', '#ceq'];
+    
+    const all360Tags = [...billingTags, ...ceqTags];
+    
+    return tagsLower.some(tag => all360Tags.includes(tag.replace('#', '').toLowerCase()));
+  };
+
+  // Get label for selected workspace filter
+  const getWorkspaceFilterLabel = (): string => {
+    const option = WORKSPACE_FILTER_OPTIONS.find(o => o.value === selectedWorkspace);
+    return option?.label || 'Unknown';
   };
 
   const uniqueReviewers = Array.from(
@@ -351,15 +468,15 @@ export function AgentDashboard() {
               <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
 
+            {/* UPDATED: Workspace dropdown with 360 queue options */}
             <select
               value={selectedWorkspace}
-              onChange={(e) => setSelectedWorkspace(e.target.value)}
+              onChange={(e) => setSelectedWorkspace(e.target.value as WorkspaceFilterType)}
               className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
-              <option value="all">All Workspaces</option>
-              {workspaces.map((workspace) => (
-                <option key={workspace.id} value={workspace.name}>
-                  {workspace.display_name}
+              {WORKSPACE_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </select>
@@ -483,7 +600,7 @@ export function AgentDashboard() {
             )}
             {selectedWorkspace !== 'all' && (
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                <span>Workspace: {workspaces.find(w => w.name === selectedWorkspace)?.display_name}</span>
+                <span>Workspace: {getWorkspaceFilterLabel()}</span>
                 <button onClick={() => setSelectedWorkspace('all')} className="hover:text-blue-900">
                   <X className="w-3 h-3" />
                 </button>
