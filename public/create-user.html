@@ -34,6 +34,16 @@
             font-size: 14px;
         }
 
+        .warning-box {
+            background: #FEF3C7;
+            border: 1px solid #F59E0B;
+            border-radius: 8px;
+            padding: 12px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: #92400E;
+        }
+
         .form-group { margin-bottom: 20px; }
 
         label {
@@ -69,6 +79,18 @@
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        button:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+            transform: none;
         }
 
         .message {
@@ -90,9 +112,20 @@
             border-top-color: white;
             animation: spin 0.6s linear infinite;
             margin-right: 8px;
+            vertical-align: middle;
         }
 
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        .debug-info {
+            margin-top: 20px;
+            padding: 10px;
+            background: #f7fafc;
+            border-radius: 6px;
+            font-size: 11px;
+            color: #718096;
+            font-family: monospace;
+        }
     </style>
 </head>
 
@@ -100,6 +133,12 @@
     <div class="container">
         <h1>Create User Account</h1>
         <p class="subtitle">Create a new account for stakeholders</p>
+
+        <div class="warning-box" id="fileWarning" style="display: none;">
+            ⚠️ <strong>Warning:</strong> This page is opened as a local file. 
+            For security reasons, it must be served from a web server. 
+            Please access it via your deployed app URL.
+        </div>
 
         <form id="createUserForm">
             <div class="form-group">
@@ -117,59 +156,92 @@
         </form>
 
         <div id="message" class="message"></div>
+
+        <div class="debug-info" id="debugInfo"></div>
     </div>
 
 <script>
+    // Configuration - Update this to match your deployment
     const API_URL = 'https://qadashboard-eight.vercel.app/api/create-user';
-
-
-    // ★★★★★ INSERT YOUR REAL SUPABASE ANON KEY HERE ★★★★★
-    const supabaseAnonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNwbW9oemVvd2VlY2trZmxzcGZ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjI5NzkxMjcsImV4cCI6MjA3ODU1NTEyN30.sdt2BPek_W0beLniM2CZmQTwMqksfYnRH4LwhF0Koc4";
-
+    
+    // Check if opened as local file
+    if (window.location.protocol === 'file:') {
+        document.getElementById('fileWarning').style.display = 'block';
+    }
 
     const form = document.getElementById("createUserForm");
     const messageDiv = document.getElementById("message");
     const submitBtn = document.getElementById("submitBtn");
+    const debugInfo = document.getElementById("debugInfo");
+
+    // Show debug info
+    debugInfo.innerHTML = `Origin: ${window.location.origin}<br>API: ${API_URL}`;
 
     form.addEventListener("submit", async (e) => {
         e.preventDefault();
 
-        const email = document.getElementById("email").value;
+        const email = document.getElementById("email").value.trim();
         const password = document.getElementById("password").value;
+
+        if (!email || !password) {
+            showMessage('error', 'Please fill in all fields');
+            return;
+        }
 
         submitBtn.disabled = true;
         submitBtn.innerHTML = `<span class="loading"></span>Creating user...`;
         messageDiv.style.display = "none";
 
         try {
+            console.log('Sending request to:', API_URL);
+            
             const response = await fetch(API_URL, {
                 method: "POST",
                 headers: {
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
                 },
+                mode: "cors",
                 body: JSON.stringify({ email, password })
             });
 
+            console.log('Response status:', response.status);
+            
             const data = await response.json();
+            console.log('Response data:', data);
+
             if (!response.ok) {
-                messageDiv.className = "message error";
-                messageDiv.innerHTML = `<strong>✗ Error:</strong> ${data.error || data.message}`;
-                messageDiv.style.display = "block";
+                showMessage('error', `Error: ${data.error || data.message || 'Unknown error'}`);
             } else {
-                messageDiv.className = "message success";
-                messageDiv.innerHTML = `<strong>✓ User created:</strong> ${email}`;
-                messageDiv.style.display = "block";
+                showMessage('success', `User created successfully: ${email}`);
                 form.reset();
             }
         } catch (err) {
-            messageDiv.className = "message error";
-            messageDiv.innerHTML = `<strong>✗ Connection Error:</strong> ${err.message}`;
-            messageDiv.style.display = "block";
+            console.error('Fetch error:', err);
+            
+            // Provide more specific error messages
+            let errorMessage = err.message;
+            if (err.message === 'Failed to fetch') {
+                if (window.location.protocol === 'file:') {
+                    errorMessage = 'Cannot make requests from local file. Please host this page on a web server.';
+                } else {
+                    errorMessage = 'Network error. Check if the API endpoint is correct and accessible.';
+                }
+            }
+            
+            showMessage('error', `Connection Error: ${errorMessage}`);
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = "Create User Account";
         }
-
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = "Create User Account";
     });
+
+    function showMessage(type, text) {
+        messageDiv.className = `message ${type}`;
+        messageDiv.innerHTML = type === 'success' 
+            ? `<strong>✓</strong> ${text}`
+            : `<strong>✗</strong> ${text}`;
+        messageDiv.style.display = "block";
+    }
 </script>
 
 </body>
