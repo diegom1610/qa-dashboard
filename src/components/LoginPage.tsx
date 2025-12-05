@@ -4,20 +4,16 @@
  * PURPOSE:
  * Authentication gate for the dashboard. Users must log in before accessing data.
  *
- * WHY SEPARATE COMPONENT:
- * Clean separation between authenticated and unauthenticated states.
- * Makes it easy to add features like "Forgot Password" later.
- *
  * FEATURES:
  * - Email/password input with validation
  * - Error messages for failed login attempts
  * - Loading state during authentication
- * - Clean, professional design
+ * - Admin link to create new user accounts
  */
 
 import { useState, type FormEvent } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { BarChart3 } from 'lucide-react';
+import { BarChart3, UserPlus } from 'lucide-react';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -26,29 +22,10 @@ export function LoginPage() {
   const [isLoading, setIsLoading] = useState(false);
   const { signIn } = useAuth();
 
-  /**
-   * HANDLE LOGIN SUBMISSION
-   *
-   * HOW IT WORKS:
-   * 1. Prevent default form submission (which would reload the page)
-   * 2. Validate inputs are not empty
-   * 3. Call signIn from AuthContext
-   * 4. If successful, AuthContext updates user state, App re-renders
-   * 5. If error, display message to user
-   *
-   * @param e - Form submit event
-   */
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
 
-    /**
-     * CLIENT-SIDE VALIDATION
-     *
-     * WHY:
-     * Faster feedback than waiting for server.
-     * Reduces unnecessary API calls.
-     */
     if (!email || !password) {
       setError('Please enter both email and password');
       return;
@@ -59,18 +36,6 @@ export function LoginPage() {
     try {
       await signIn(email, password);
     } catch (err) {
-      /**
-       * ERROR HANDLING
-       *
-       * COMMON ERRORS:
-       * - Invalid credentials
-       * - User not found
-       * - Network errors
-       * - Account locked
-       *
-       * USER-FRIENDLY MESSAGES:
-       * Convert technical errors to readable messages
-       */
       const message = err instanceof Error ? err.message : 'Login failed';
       setError(message);
     } finally {
@@ -92,7 +57,6 @@ export function LoginPage() {
 
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Email Input */}
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-slate-700 mb-2">
               Email Address
@@ -108,7 +72,6 @@ export function LoginPage() {
             />
           </div>
 
-          {/* Password Input */}
           <div>
             <label htmlFor="password" className="block text-sm font-medium text-slate-700 mb-2">
               Password
@@ -124,14 +87,12 @@ export function LoginPage() {
             />
           </div>
 
-          {/* Error Message */}
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
               {error}
             </div>
           )}
 
-          {/* Submit Button */}
           <button
             type="submit"
             disabled={isLoading}
@@ -141,9 +102,22 @@ export function LoginPage() {
           </button>
         </form>
 
+        {/* Admin Link - Create User */}
+        <div className="mt-6 pt-6 border-t border-slate-200">
+          <a
+            href="/create-user.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center justify-center gap-2 w-full py-2 px-4 text-sm text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition"
+          >
+            <UserPlus className="w-4 h-4" />
+            Admin: Create New User Account
+          </a>
+        </div>
+
         {/* Help Text */}
-        <p className="mt-6 text-center text-sm text-slate-600">
-          Need access? Contact your administrator to create an account.
+        <p className="mt-4 text-center text-sm text-slate-500">
+          Need access? Contact your administrator.
         </p>
       </div>
     </div>
