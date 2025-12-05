@@ -3,20 +3,6 @@
  *
  * PURPOSE:
  * Main application component that orchestrates all dashboard features.
- *
- * WHY SINGLE CONTAINER:
- * - Manages global state (filters)
- * - Coordinates data flow between components
- * - Provides consistent layout and navigation
- *
- * ARCHITECTURE:
- * Dashboard (state management)
- *   ├── Header (logo, user info, logout)
- *   ├── FilterBar (filter controls)
- *   ├── MetricsGrid (summary KPIs)
- *   └── ConversationTable (detailed data + feedback)
- *       ├── FeedbackHistory (existing reviews)
- *       └── FeedbackPanel (submit new review)
  */
 
 import { useState } from 'react';
@@ -31,15 +17,6 @@ import { ConversationTable } from './ConversationTable';
 import { ConversationViewer } from './ConversationViewer';
 import type { FilterState } from '../types/database';
 
-/**
- * GET DEFAULT DATE RANGE
- *
- * WHY LAST 30 DAYS:
- * Showing all historical data by default can be overwhelming and slow.
- * Last 30 days provides relevant recent data while keeping queries fast.
- *
- * Users can still adjust the date range to see older data if needed.
- */
 const getDefaultDateRange = () => {
   const endDate = new Date();
   const startDate = new Date();
@@ -51,13 +28,6 @@ const getDefaultDateRange = () => {
   };
 };
 
-/**
- * INITIAL FILTER STATE
- *
- * WHY DEFAULTS:
- * Start with last 30 days of data - show recent, relevant conversations.
- * Users can adjust date range or clear filters to see more/less data.
- */
 const initialFilters: FilterState = {
   agentIds: [],
   conversationId: '',
@@ -65,24 +35,15 @@ const initialFilters: FilterState = {
   resolutionStatus: null,
 };
 
-/**
- * DASHBOARD COMPONENT
- */
 export function Dashboard() {
   const [filters, setFilters] = useState<FilterState>(initialFilters);
   const [syncing, setSyncing] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'table' | 'preview'>('table');
   const { user, signOut } = useAuth();
   const { agents, loading: agentsLoading } = useAgents(true);
   const { metrics, loading: metricsLoading, error, refetch } = useMetrics(filters);
   const { feedback: allFeedback } = useFeedback();
 
-  /**
-   * HANDLE INTERCOM SYNC
-   *
-   * Syncs last 30 days of Intercom conversations
-   */
   const handleIntercomSync = async () => {
     setSyncing(true);
     try {
@@ -113,14 +74,6 @@ export function Dashboard() {
     }
   };
 
-  /**
-   * HANDLE LOGOUT
-   *
-   * HOW IT WORKS:
-   * 1. Call signOut from AuthContext
-   * 2. AuthContext clears session
-   * 3. App.tsx detects no user, shows LoginPage
-   */
   const handleLogout = async () => {
     try {
       await signOut();
@@ -164,15 +117,6 @@ export function Dashboard() {
                 <span className="hidden sm:inline">
                   {syncing ? 'Syncing...' : 'Sync Intercom'}
                 </span>
-              </button>
-
-              {/* Refresh Button */}
-              <button
-                onClick={refetch}
-                className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
-                title="Refresh data"
-              >
-                <RefreshCw className="w-5 h-5" />
               </button>
 
               {/* User Info */}
@@ -264,7 +208,7 @@ export function Dashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
             <p className="text-sm text-slate-600">
-              QA Dashboard &copy; {new Date().getFullYear()}
+              QA Dashboard © {new Date().getFullYear()}
             </p>
             <div className="flex items-center gap-4 text-sm text-slate-600">
               <a href="#" className="hover:text-slate-900 transition">
