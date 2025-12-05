@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { LogOut, X, Calendar } from 'lucide-react';
+import { X, Calendar } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import type { QAMetric, HumanFeedback, Workspace, AgentGroup } from '../types/database';
@@ -201,9 +201,15 @@ export function AgentDashboard() {
       });
     }
 
-    // Apply workspace filter
+    // Apply workspace filter (including 360 views)
     if (selectedWorkspace !== 'all') {
-      filtered = filtered.filter(m => m.workspace === selectedWorkspace);
+      if (selectedWorkspace === '360_SkyPrivate') {
+        filtered = filtered.filter(m => m.workspace === 'SkyPrivate' && m.is_360_queue === true);
+      } else if (selectedWorkspace === '360_CamModelDirectory') {
+        filtered = filtered.filter(m => m.workspace === 'CamModelDirectory' && m.is_360_queue === true);
+      } else {
+        filtered = filtered.filter(m => m.workspace === selectedWorkspace);
+      }
     }
 
     // Apply reviewee (agent) filter
@@ -299,6 +305,7 @@ export function AgentDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {/* Header - simplified since logout is now in App.tsx navigation */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
@@ -306,13 +313,6 @@ export function AgentDashboard() {
               <h1 className="text-2xl font-bold text-slate-900">Agent Performance Dashboard</h1>
               <p className="text-sm text-slate-600">Welcome, {user?.email}</p>
             </div>
-            <button
-              onClick={signOut}
-              className="flex items-center gap-2 px-4 py-2 text-sm text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
-            >
-              <LogOut className="w-4 h-4" />
-              Sign Out
-            </button>
           </div>
         </div>
       </header>
@@ -357,11 +357,17 @@ export function AgentDashboard() {
               className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="all">All Workspaces</option>
-              {workspaces.map((workspace) => (
-                <option key={workspace.id} value={workspace.name}>
-                  {workspace.display_name}
-                </option>
-              ))}
+              <optgroup label="Workspaces">
+                {workspaces.map((workspace) => (
+                  <option key={workspace.id} value={workspace.name}>
+                    {workspace.display_name}
+                  </option>
+                ))}
+              </optgroup>
+              <optgroup label="360 Views">
+                <option value="360_SkyPrivate">360 view - SkyPrivate</option>
+                <option value="360_CamModelDirectory">360 view - CamModelDirectory</option>
+              </optgroup>
             </select>
 
             <select
@@ -483,7 +489,11 @@ export function AgentDashboard() {
             )}
             {selectedWorkspace !== 'all' && (
               <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                <span>Workspace: {workspaces.find(w => w.name === selectedWorkspace)?.display_name}</span>
+                <span>Workspace: {
+                  selectedWorkspace === '360_SkyPrivate' ? '360 view - SkyPrivate' :
+                  selectedWorkspace === '360_CamModelDirectory' ? '360 view - CamModelDirectory' :
+                  workspaces.find(w => w.name === selectedWorkspace)?.display_name || selectedWorkspace
+                }</span>
                 <button onClick={() => setSelectedWorkspace('all')} className="hover:text-blue-900">
                   <X className="w-3 h-3" />
                 </button>

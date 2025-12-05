@@ -3,13 +3,21 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginPage } from './components/LoginPage';
 import { Dashboard } from './components/Dashboard';
 import { AgentDashboard } from './components/AgentDashboard';
-import { BarChart3, Users } from 'lucide-react';
+import { BarChart3, Users, LogOut } from 'lucide-react';
 
 type ViewMode = 'reviewer' | 'agent';
 
 function AppContent() {
-  const { user, loading } = useAuth();
+  const { user, loading, signOut } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>('reviewer');
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
 
   if (loading) {
     return (
@@ -28,28 +36,41 @@ function AppContent() {
 
   return (
     <div>
-      <div className="fixed top-4 right-4 z-50 flex gap-2 bg-white rounded-lg shadow-lg p-1 border border-slate-200">
+      {/* Fixed navigation bar with Reviewer/Agent toggle and Logout button */}
+      <div className="fixed top-4 right-4 z-50 flex items-center gap-3">
+        {/* View Mode Toggle */}
+        <div className="flex gap-2 bg-white rounded-lg shadow-lg p-1 border border-slate-200">
+          <button
+            onClick={() => setViewMode('reviewer')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition ${
+              viewMode === 'reviewer'
+                ? 'bg-blue-600 text-white'
+                : 'text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            Reviewer
+          </button>
+          <button
+            onClick={() => setViewMode('agent')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition ${
+              viewMode === 'agent'
+                ? 'bg-blue-600 text-white'
+                : 'text-slate-700 hover:bg-slate-100'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            Agent
+          </button>
+        </div>
+
+        {/* Logout Button - Separate and visible */}
         <button
-          onClick={() => setViewMode('reviewer')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition ${
-            viewMode === 'reviewer'
-              ? 'bg-blue-600 text-white'
-              : 'text-slate-700 hover:bg-slate-100'
-          }`}
+          onClick={handleLogout}
+          className="flex items-center gap-2 px-4 py-2 bg-white rounded-lg shadow-lg border border-slate-200 text-sm font-medium text-red-600 hover:bg-red-50 hover:border-red-200 transition"
         >
-          <BarChart3 className="w-4 h-4" />
-          Reviewer
-        </button>
-        <button
-          onClick={() => setViewMode('agent')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition ${
-            viewMode === 'agent'
-              ? 'bg-blue-600 text-white'
-              : 'text-slate-700 hover:bg-slate-100'
-          }`}
-        >
-          <Users className="w-4 h-4" />
-          Agent
+          <LogOut className="w-4 h-4" />
+          Logout
         </button>
       </div>
 
