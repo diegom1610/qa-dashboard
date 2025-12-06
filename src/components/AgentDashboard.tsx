@@ -191,12 +191,6 @@ export function AgentDashboard() {
 
   const applyFilters = async () => {
     let filtered = [...metrics];
-    
-    // DEBUG: Log initial state
-    console.log('=== FILTER DEBUG ===');
-    console.log('Total metrics:', metrics.length);
-    console.log('Selected workspace:', selectedWorkspace);
-    console.log('Sample metric workspace values:', metrics.slice(0, 5).map(m => m.workspace));
 
     // Apply date range filter
     const { startDate, endDate } = getDateRange();
@@ -205,25 +199,17 @@ export function AgentDashboard() {
         const metricDate = new Date(m.metric_date);
         return metricDate >= startDate && metricDate <= endDate;
       });
-      console.log('After date filter:', filtered.length);
     }
 
     // Apply workspace filter (including 360 views)
     if (selectedWorkspace !== 'all') {
-      const beforeWorkspaceFilter = filtered.length;
       if (selectedWorkspace === '360_SkyPrivate') {
         filtered = filtered.filter(m => m.workspace === 'SkyPrivate' && m.is_360_queue === true);
       } else if (selectedWorkspace === '360_CamModelDirectory') {
         filtered = filtered.filter(m => m.workspace === 'CamModelDirectory' && m.is_360_queue === true);
       } else {
-        // DEBUG: Check exact matching
-        const matchingWorkspaces = filtered.filter(m => m.workspace === selectedWorkspace);
-        console.log(`Workspace filter: looking for "${selectedWorkspace}"`);
-        console.log('Matching workspaces found:', matchingWorkspaces.length);
-        console.log('Unique workspace values in data:', [...new Set(filtered.map(m => m.workspace))]);
-        filtered = matchingWorkspaces;
+        filtered = filtered.filter(m => m.workspace === selectedWorkspace);
       }
-      console.log(`After workspace filter: ${beforeWorkspaceFilter} -> ${filtered.length}`);
     }
 
     // Apply reviewee (agent) filter
@@ -560,11 +546,20 @@ export function AgentDashboard() {
           </div>
         ) : (
           <>
-            <AgentPerformanceStats metrics={filteredMetrics} feedback={allFeedback} />
-            <AgentPerformanceTable metrics={filteredMetrics} feedback={allFeedback} />
-            <div className="mt-6"> 
-              <AgentConversationsTable metrics={filteredMetrics} feedback={allFeedback} />
-            </div>
+            {/* Filter feedback to only include conversations in filteredMetrics */}
+            {(() => {
+              const filteredConversationIds = new Set(filteredMetrics.map(m => m.conversation_id));
+              const filteredFeedback = allFeedback.filter(f => filteredConversationIds.has(f.conversation_id));
+              return (
+                <>
+                  <AgentPerformanceStats metrics={filteredMetrics} feedback={filteredFeedback} />
+                  <AgentPerformanceTable metrics={filteredMetrics} feedback={filteredFeedback} />
+                  <div className="mt-6"> 
+                    <AgentConversationsTable metrics={filteredMetrics} feedback={filteredFeedback} />
+                  </div>
+                </>
+              );
+            })()}
           </>
         )}
       </main>
