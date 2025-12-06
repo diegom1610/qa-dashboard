@@ -244,12 +244,11 @@ export function AgentDashboard() {
       filtered = filtered.filter(m => reviewedConversations.includes(m.conversation_id));
     }
 
-    // UPDATED: Filter by human review status using rating_source
+    // FIXED: Filter by human review status using actual feedback data
+    // This checks if the conversation has ANY human feedback submitted
     if (showHumanReviewedOnly) {
-      filtered = filtered.filter(m => {
-        // Check if rating_source includes human feedback
-        return m.rating_source === 'human' || m.rating_source === 'both';
-      });
+      const conversationsWithHumanFeedback = new Set(allFeedback.map(f => f.conversation_id));
+      filtered = filtered.filter(m => conversationsWithHumanFeedback.has(m.conversation_id));
     }
 
     setFilteredMetrics(filtered);
@@ -307,7 +306,7 @@ export function AgentDashboard() {
     <div className="min-h-screen bg-slate-50">
       {/* Header - simplified since logout is now in App.tsx navigation */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pr-48">
           <div className="flex items-center justify-between h-16">
             <div>
               <h1 className="text-2xl font-bold text-slate-900">Agent Performance Dashboard</h1>
