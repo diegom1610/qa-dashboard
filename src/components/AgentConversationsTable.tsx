@@ -31,8 +31,9 @@ export function AgentConversationsTable({ metrics, feedback }: AgentConversation
 
       switch (sortField) {
         case 'date':
-          aVal = new Date(a.metric_date).getTime();
-          bVal = new Date(b.metric_date).getTime();
+          // Use string comparison for dates to avoid timezone issues
+          aVal = a.metric_date || '';
+          bVal = b.metric_date || '';
           break;
         case 'agent':
           aVal = a.agent_name.toLowerCase();
@@ -75,13 +76,18 @@ export function AgentConversationsTable({ metrics, feedback }: AgentConversation
     return feedback.filter(f => f.conversation_id === conversationId);
   };
 
+  // FIXED: Timezone-safe date formatting
+  // Parse the date string directly without timezone conversion
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric' 
-    });
+    if (!dateString) return 'N/A';
+    
+    // Extract just the date part (YYYY-MM-DD) to avoid timezone shifts
+    const datePart = dateString.split('T')[0];
+    const [year, month, day] = datePart.split('-').map(Number);
+    
+    // Create date using UTC to prevent timezone conversion
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${months[month - 1]} ${day}, ${year}`;
   };
 
   if (sortedData.length === 0) {

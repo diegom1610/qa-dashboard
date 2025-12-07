@@ -131,14 +131,16 @@ export function AgentDashboard() {
       const { data: metricsData, error: metricsError } = await supabase
         .from('qa_metrics')
         .select('*')
-        .order('metric_date', { ascending: false });
+        .order('metric_date', { ascending: false })
+        .limit(10000);
 
       if (metricsError) throw metricsError;
 
       const { data: feedbackData, error: feedbackError } = await supabase
         .from('human_feedback')
         .select('*')
-        .order('created_at', { ascending: false});
+        .order('created_at', { ascending: false })
+        .limit(10000);
 
       if (feedbackError) throw feedbackError;
 
@@ -192,12 +194,17 @@ export function AgentDashboard() {
   const applyFilters = async () => {
     let filtered = [...metrics];
 
-    // Apply date range filter
+    // Apply date range filter - compare dates only (ignoring time/timezone)
     const { startDate, endDate } = getDateRange();
     if (startDate && endDate) {
+      // Normalize dates to YYYY-MM-DD strings for comparison
+      const startStr = startDate.toISOString().split('T')[0];
+      const endStr = endDate.toISOString().split('T')[0];
+      
       filtered = filtered.filter(m => {
-        const metricDate = new Date(m.metric_date);
-        return metricDate >= startDate && metricDate <= endDate;
+        // Extract just the date part from metric_date
+        const metricDateStr = m.metric_date ? m.metric_date.split('T')[0] : '';
+        return metricDateStr >= startStr && metricDateStr <= endStr;
       });
     }
 
