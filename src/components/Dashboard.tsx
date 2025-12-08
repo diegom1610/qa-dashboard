@@ -43,7 +43,7 @@ import type { FilterState } from '../types/database';
 const getDefaultDateRange = () => {
   const endDate = new Date();
   const startDate = new Date();
-  startDate.setDate(startDate.getDate() - 30);
+  startDate.setDate(startDate.getDate() - 1);
 
   return {
     startDate: startDate.toISOString().split('T')[0],
@@ -93,7 +93,7 @@ export function Dashboard() {
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ days: 30 }),
+        body: JSON.stringify({ days: 1 }),
       });
 
       if (!response.ok) {
