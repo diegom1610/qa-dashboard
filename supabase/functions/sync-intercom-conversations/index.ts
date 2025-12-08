@@ -336,19 +336,46 @@ async function enrichConversationWithDetails(
 
     const data = await response.json();
     
-    // Extract the REAL date - use created_at as primary
+    // ============================================
+    // FIXED: Extract the REAL conversation date
+    // Priority order (most accurate first):
+    // 1. source.delivered_as + first conversation_parts[0].created_at - actual first message
+    // 2. conversation_parts[0].created_at - first message in thread
+    // 3. statistics.first_contact_reply_at - first contact timestamp
+    // 4. created_at - conversation object creation (less reliable)
+    // ============================================
+    
     let realDate: string | null = null;
+    let timestamp: number | null = null;
     
-    // Priority order for date:
-    // 1. created_at - when the conversation was created
-    // 2. statistics.first_contact_reply_at - first message timestamp
-    // 3. updated_at - last update (fallback)
+    // Try to get the first message timestamp from conversation_parts
+    const conversationParts = data.conversation_parts?.conversation_parts || [];
+    if (conversationParts.length > 0) {
+      // Find the earliest message
+      const firstPart = conversationParts[0];
+      if (firstPart?.created_at) {
+        timestamp = firstPart.created_at;
+        console.log(`  Using first conversation_part timestamp: ${timestamp}`);
+      }
+    }
     
-    const createdAt = data.created_at;
-    const firstContactReply = data.statistics?.first_contact_reply_at;
-    const updatedAt = data.updated_at;
+    // Fallback to source created_at (the initial message)
+    if (!timestamp && data.source?.created_at) {
+      timestamp = data.source.created_at;
+      console.log(`  Using source.created_at: ${timestamp}`);
+    }
     
-    const timestamp = createdAt || firstContactReply || updatedAt;
+    // Fallback to statistics
+    if (!timestamp && data.statistics?.first_contact_reply_at) {
+      timestamp = data.statistics.first_contact_reply_at;
+      console.log(`  Using statistics.first_contact_reply_at: ${timestamp}`);
+    }
+    
+    // Last fallback to created_at
+    if (!timestamp && data.created_at) {
+      timestamp = data.created_at;
+      console.log(`  Using created_at (fallback): ${timestamp}`);
+    }
     
     if (timestamp) {
       realDate = parseTimestampToDate(timestamp);
