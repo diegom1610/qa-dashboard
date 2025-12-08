@@ -35,60 +35,63 @@ interface ConversationRow {
 // WORKSPACE & 360 QUEUE TAG DEFINITIONS
 // ============================================
 
-// Workspace tags - determines which workspace a conversation belongs to
-const WORKSPACE_TAGS = {
-  SKYPRIVATE: ['skyprivate', 'SkyPrivate'],
-  CMD: ['cmd', 'CMD', 'cammodeldirectory', 'CamModelDirectory'],
+// Workspace keywords - uses CONTAINS logic (not exact match)
+const WORKSPACE_KEYWORDS = {
+  SKYPRIVATE: ['skyprivate', 'sky private', 'sky-private'],
+  CMD: ['cmd', 'cammodeldirectory', 'cam model directory', 'cam-model-directory'],
 };
 
-// 360 Queue tags - for filtering 360 view conversations
-const BILLING_360_TAGS = [
-  'payments',
-  'billing-verifications', 
-  'Billing - top-up-issue',
+// 360 Queue keywords - uses CONTAINS logic
+const BILLING_360_KEYWORDS = [
+  'payment',
   'billing',
   'top-up',
+  'topup',
+  'top up',
+  'verification',
 ];
 
-const CEQ_360_TAGS = [
-  'reports',
-  'scammers',
-  'ceq-verifications',
-  'publicprofile',
+const CEQ_360_KEYWORDS = [
+  'report',
+  'scammer',
   'ceq',
+  'publicprofile',
+  'public profile',
 ];
-
-// Combined 360 tags (for 360 view filter)
-const ALL_360_TAGS = [...BILLING_360_TAGS, ...CEQ_360_TAGS];
 
 /**
- * Determine workspace from tags
+ * FIXED: Determine workspace from tags using CONTAINS logic
+ * Tags may have prefixes like "# SkyPrivate" or "1 - Member"
  */
 function determineWorkspace(tags: string[]): string {
-  const lowerTags = tags.map(t => t.toLowerCase());
+  // Join all tags into one string for easier searching
+  const allTagsLower = tags.map(t => t.toLowerCase()).join(' ');
   
-  if (lowerTags.some(t => WORKSPACE_TAGS.SKYPRIVATE.map(w => w.toLowerCase()).includes(t))) {
-    return 'SkyPrivate';
+  // Check for SkyPrivate keywords
+  for (const keyword of WORKSPACE_KEYWORDS.SKYPRIVATE) {
+    if (allTagsLower.includes(keyword)) {
+      return 'SkyPrivate';
+    }
   }
-  if (lowerTags.some(t => WORKSPACE_TAGS.CMD.map(w => w.toLowerCase()).includes(t))) {
-    return 'CamModelDirectory';
+  
+  // Check for CMD keywords
+  for (const keyword of WORKSPACE_KEYWORDS.CMD) {
+    if (allTagsLower.includes(keyword)) {
+      return 'CamModelDirectory';
+    }
   }
+  
   return 'Unknown';
 }
 
 /**
- * Determine if conversation is a 360 queue conversation
+ * FIXED: Determine if conversation is a 360 queue conversation using CONTAINS logic
  */
 function determine360Queue(tags: string[]): { is360: boolean; queueType: string | null } {
-  const lowerTags = tags.map(t => t.toLowerCase());
+  const allTagsLower = tags.map(t => t.toLowerCase()).join(' ');
   
-  const isBilling = lowerTags.some(t => 
-    BILLING_360_TAGS.map(bt => bt.toLowerCase()).includes(t)
-  );
-  
-  const isCEQ = lowerTags.some(t => 
-    CEQ_360_TAGS.map(ct => ct.toLowerCase()).includes(t)
-  );
+  const isBilling = BILLING_360_KEYWORDS.some(keyword => allTagsLower.includes(keyword));
+  const isCEQ = CEQ_360_KEYWORDS.some(keyword => allTagsLower.includes(keyword));
   
   if (isBilling && isCEQ) {
     return { is360: true, queueType: 'both' };
@@ -175,7 +178,7 @@ Deno.serve(async (req: Request) => {
       .map((row: ConversationRow) => parseConversationRow(row, adminsMap));
 
     // ============================================
-    // CRITICAL FIX: Enrich ALL conversations with real timestamps and tags
+    // CRITICAL: Enrich ALL conversations with real timestamps and tags
     // The Intercom Reporting Export API often returns incorrect or missing dates
     // We MUST fetch the actual conversation to get the real created_at date and tags
     // ============================================
@@ -185,6 +188,9 @@ Deno.serve(async (req: Request) => {
     // Process in batches to avoid rate limiting
     const BATCH_SIZE = 10;
     const DELAY_BETWEEN_BATCHES = 500; // ms
+    
+    let enrichedCount = 0;
+    let failedCount = 0;
     
     for (let i = 0; i < conversations.length; i += BATCH_SIZE) {
       const batch = conversations.slice(i, i + BATCH_SIZE);
@@ -207,7 +213,11 @@ Deno.serve(async (req: Request) => {
           conv.is_360_queue = enrichedData.is360Queue;
           conv.queue_type_360 = enrichedData.queueType360;
           
-          console.log(`✓ Enriched ${conv.conversation_id}: ${conv.metric_date} | ${conv.workspace} | 360: ${conv.is_360_queue}`);
+          enrichedCount++;
+          console.log(`✓ Enriched ${conv.conversation_id}: date=${conv.metric_date} | workspace=${conv.workspace} | tags=[${enrichedData.tags.slice(0,3).join(', ')}${enrichedData.tags.length > 3 ? '...' : ''}] | 360=${conv.is_360_queue}`);
+        } else {
+          failedCount++;
+          console.warn(`✗ Failed to enrich ${conv.conversation_id}`);
         }
       }));
       
@@ -216,6 +226,8 @@ Deno.serve(async (req: Request) => {
         await new Promise(resolve => setTimeout(resolve, DELAY_BETWEEN_BATCHES));
       }
     }
+    
+    console.log(`Enrichment complete: ${enrichedCount} succeeded, ${failedCount} failed`);
 
     console.log(`Upserting ${conversations.length} conversations to Supabase...`);
     const { error } = await supabase
@@ -260,6 +272,10 @@ Deno.serve(async (req: Request) => {
         success: true,
         message: `Synced ${conversations.length} conversations`,
         conversations_processed: conversations.length,
+        enrichment_results: {
+          succeeded: enrichedCount,
+          failed: failedCount,
+        },
         date_range: {
           start: new Date(startUnix * 1000).toISOString(),
           end: new Date(endUnix * 1000).toISOString(),
@@ -320,7 +336,7 @@ async function enrichConversationWithDetails(
 
     const data = await response.json();
     
-    // Extract the REAL date - use created_at as primary, statistics.first_contact_reply_at as backup
+    // Extract the REAL date - use created_at as primary
     let realDate: string | null = null;
     
     // Priority order for date:
@@ -338,11 +354,23 @@ async function enrichConversationWithDetails(
       realDate = parseTimestampToDate(timestamp);
     }
     
-    // Extract tags
-    const tagsData = data.tags?.tags || [];
-    const tags: string[] = tagsData.map((tag: { name?: string }) => tag.name || '').filter(Boolean);
+    // Extract tags - handle multiple possible formats
+    let tags: string[] = [];
     
-    // Determine workspace from tags
+    if (data.tags?.tags && Array.isArray(data.tags.tags)) {
+      tags = data.tags.tags.map((tag: { name?: string; id?: string }) => tag.name || '').filter(Boolean);
+    } else if (data.tags && Array.isArray(data.tags)) {
+      tags = data.tags.map((tag: { name?: string } | string) => 
+        typeof tag === 'string' ? tag : (tag.name || '')
+      ).filter(Boolean);
+    }
+    
+    // Log tags for debugging
+    if (tags.length > 0) {
+      console.log(`  Tags for ${conversationId}: [${tags.join(', ')}]`);
+    }
+    
+    // Determine workspace from tags using CONTAINS logic
     const workspace = determineWorkspace(tags);
     
     // Determine 360 queue status
@@ -388,6 +416,8 @@ function parseTimestampToDate(ts: number | string): string | null {
   }
   
   const date = new Date(dateMs);
+  
+  // Return ISO date string (YYYY-MM-DD) - this is UTC which is what we want
   return date.toISOString().split("T")[0];
 }
 
@@ -404,6 +434,7 @@ async function fetchAllAdmins(token: string): Promise<Record<string, string>> {
       headers: {
         "Authorization": `Bearer ${token}`,
         "Accept": "application/json",
+        "Intercom-Version": "2.14",
       },
     });
 
@@ -413,18 +444,18 @@ async function fetchAllAdmins(token: string): Promise<Record<string, string>> {
     }
 
     const data = await response.json();
-    const adminList = data.admins || data.data || [];
+    const admins = data.admins || [];
 
-    for (const admin of adminList) {
-      const aid = admin.id;
-      const name = admin.name || admin.email || String(aid);
-      if (aid) {
-        adminsMap[String(aid)] = name;
+    for (const admin of admins) {
+      const id = admin.id || admin.admin_id;
+      const name = admin.name || admin.email || id;
+      if (id) {
+        adminsMap[String(id)] = name;
       }
     }
 
-    const nextUrl = data.pages?.next;
-    url = nextUrl || "";
+    const pages = data.pages || {};
+    url = pages.next || "";
   }
 
   return adminsMap;
@@ -691,12 +722,12 @@ function parseConversationRow(row: ConversationRow, adminsMap: Record<string, st
 
 function resolveAgentName(agentId: string, adminsMap: Record<string, string>): string {
   if (!agentId || agentId === "Unknown") {
-    return "Unknown";
+    return "Unassigned";
   }
 
   if (!/^\d+$/.test(String(agentId).trim()) && !/^[0-9a-fA-F-]{8,}$/.test(String(agentId).trim())) {
     return agentId;
   }
   
-  return adminsMap[String(agentId)] || agentId;
+  return adminsMap[String(agentId)] || "Unassigned";
 }
