@@ -202,10 +202,17 @@ Deno.serve(async (req: Request) => {
         );
 
         if (enrichedData) {
-          // Update date if we got a real one
-          if (enrichedData.realDate) {
+          // FIXED: Only update date if the export didn't provide a valid one
+          // The Reporting Export API's conversation_started_at is more reliable
+          if (enrichedData.realDate && !conv.date_is_from_export) {
             conv.metric_date = enrichedData.realDate;
+            console.log(`  Updated date from enrichment: ${conv.metric_date}`);
+          } else if (conv.date_is_from_export) {
+            console.log(`  Keeping export date: ${conv.metric_date} (not overwriting)`);
           }
+          
+          // Remove the flag before upserting (not a database column)
+          delete conv.date_is_from_export;
           
           // Add tags and workspace info
           conv.tags = enrichedData.tags;
@@ -216,6 +223,8 @@ Deno.serve(async (req: Request) => {
           enrichedCount++;
           console.log(`✓ Enriched ${conv.conversation_id}: date=${conv.metric_date} | workspace=${conv.workspace} | tags=[${enrichedData.tags.slice(0,3).join(', ')}${enrichedData.tags.length > 3 ? '...' : ''}] | 360=${conv.is_360_queue}`);
         } else {
+          // Remove the flag even on failure
+          delete conv.date_is_from_export;
           failedCount++;
           console.warn(`✗ Failed to enrich ${conv.conversation_id}`);
         }
@@ -684,13 +693,23 @@ function parseCSVLine(line: string): string[] {
 }
 
 function parseConversationRow(row: ConversationRow, adminsMap: Record<string, string>) {
-  // Initial date parsing (will be overwritten by enrichment)
+  // FIXED: Prioritize conversation_started_at (when chat began) over conversation_last_closed_at
+  // The Reporting Export API provides the correct date here
   let metricDate: string;
-  const ts = row.conversation_last_closed_at || row.conversation_started_at || "";
+  let dateIsFromExport = false;
+  
+  // Use conversation_started_at first (this is when the conversation actually started)
+  const ts = row.conversation_started_at || row.conversation_last_closed_at || "";
 
   if (ts && ts.trim() !== "" && ts.trim() !== "0") {
     const parsed = parseTimestampToDate(ts.trim());
-    metricDate = parsed || new Date().toISOString().split("T")[0];
+    if (parsed) {
+      metricDate = parsed;
+      dateIsFromExport = true; // Mark that we got a valid date from export
+      console.log(`  Export date for ${row.conversation_id}: ${metricDate} (from ${row.conversation_started_at ? 'started_at' : 'closed_at'})`);
+    } else {
+      metricDate = new Date().toISOString().split("T")[0];
+    }
   } else {
     metricDate = new Date().toISOString().split("T")[0];
   }
@@ -733,6 +752,7 @@ function parseConversationRow(row: ConversationRow, adminsMap: Record<string, st
     agent_id: agentRaw,
     agent_name: agentName,
     metric_date: metricDate,
+    date_is_from_export: dateIsFromExport, // Flag to prevent overwriting valid dates
     ai_score: aiScore,
     ai_feedback: aiExplanation,
     resolution_status: row.conversation_state || "completed",
