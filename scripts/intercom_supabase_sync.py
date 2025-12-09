@@ -676,10 +676,13 @@ def sync_conversations(start_unix: int, end_unix: int, enrich: bool = True) -> i
     else:
         logger.info("Step 7: Skipping enrichment (disabled)")
     
-    # Step 8: Prepare for Supabase (convert tags list to JSON string)
+    # Step 8: Prepare for Supabase
+    # Remove tags field - the column type in Supabase may be incompatible
+    # Tags are already stored in conversation_threads table via fetch_conversation_thread.py
     for conv in conversations:
-        if isinstance(conv.get("tags"), list):
-            conv["tags"] = json.dumps(conv["tags"])
+        # Remove tags to avoid array format issues
+        if "tags" in conv:
+            del conv["tags"]
     
     # Step 9: Upsert to Supabase
     logger.info(f"Step 8: Upserting {len(conversations)} conversations to Supabase...")
