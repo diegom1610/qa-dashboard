@@ -202,13 +202,12 @@ Deno.serve(async (req: Request) => {
         );
 
         if (enrichedData) {
-          // FIXED: Only update date if the export didn't provide a valid one
-          // The Reporting Export API's conversation_started_at is more reliable
-          if (enrichedData.realDate && !conv.date_is_from_export) {
+          // FIXED: The Reporting Export API returns WRONG dates (export date, not conversation date)
+          // The individual conversation API returns the CORRECT date
+          // So we ALWAYS use the enrichment date if available
+          if (enrichedData.realDate) {
+            console.log(`  Date: export=${conv.metric_date} -> enriched=${enrichedData.realDate}`);
             conv.metric_date = enrichedData.realDate;
-            console.log(`  Updated date from enrichment: ${conv.metric_date}`);
-          } else if (conv.date_is_from_export) {
-            console.log(`  Keeping export date: ${conv.metric_date} (not overwriting)`);
           }
           
           // Remove the flag before upserting (not a database column)
@@ -327,8 +326,9 @@ async function enrichConversationWithDetails(
   conversationId: string
 ): Promise<EnrichedConversationData | null> {
   try {
+    // Request conversation with display_as=plaintext to get conversation_parts
     const response = await fetch(
-      `https://api.intercom.io/conversations/${conversationId}`,
+      `https://api.intercom.io/conversations/${conversationId}?display_as=plaintext`,
       {
         headers: {
           "Authorization": `Bearer ${token}`,
@@ -347,47 +347,41 @@ async function enrichConversationWithDetails(
     
     // ============================================
     // FIXED: Extract the REAL conversation date
-    // Priority order (most accurate first):
-    // 1. source.delivered_as + first conversation_parts[0].created_at - actual first message
-    // 2. conversation_parts[0].created_at - first message in thread
-    // 3. statistics.first_contact_reply_at - first contact timestamp
-    // 4. created_at - conversation object creation (less reliable)
+    // The first message's created_at is the true conversation start date
+    // Priority order:
+    // 1. source.created_at - the original message that started the conversation
+    // 2. First conversation_part created_at
+    // 3. created_at on conversation object
     // ============================================
     
     let realDate: string | null = null;
     let timestamp: number | null = null;
+    let dateSource: string = '';
     
-    // Try to get the first message timestamp from conversation_parts
-    const conversationParts = data.conversation_parts?.conversation_parts || [];
-    if (conversationParts.length > 0) {
-      // Find the earliest message
-      const firstPart = conversationParts[0];
-      if (firstPart?.created_at) {
-        timestamp = firstPart.created_at;
-        console.log(`  Using first conversation_part timestamp: ${timestamp}`);
+    // BEST: Use source.created_at - this is the original message
+    if (data.source?.created_at) {
+      timestamp = data.source.created_at;
+      dateSource = 'source.created_at';
+    }
+    
+    // Fallback: Try first conversation part
+    if (!timestamp) {
+      const conversationParts = data.conversation_parts?.conversation_parts || [];
+      if (conversationParts.length > 0 && conversationParts[0]?.created_at) {
+        timestamp = conversationParts[0].created_at;
+        dateSource = 'conversation_parts[0]';
       }
     }
     
-    // Fallback to source created_at (the initial message)
-    if (!timestamp && data.source?.created_at) {
-      timestamp = data.source.created_at;
-      console.log(`  Using source.created_at: ${timestamp}`);
-    }
-    
-    // Fallback to statistics
-    if (!timestamp && data.statistics?.first_contact_reply_at) {
-      timestamp = data.statistics.first_contact_reply_at;
-      console.log(`  Using statistics.first_contact_reply_at: ${timestamp}`);
-    }
-    
-    // Last fallback to created_at
+    // Fallback: Use conversation created_at
     if (!timestamp && data.created_at) {
       timestamp = data.created_at;
-      console.log(`  Using created_at (fallback): ${timestamp}`);
+      dateSource = 'created_at';
     }
     
     if (timestamp) {
       realDate = parseTimestampToDate(timestamp);
+      console.log(`  Date from ${dateSource}: ${timestamp} -> ${realDate}`);
     }
     
     // Extract tags - handle multiple possible formats
@@ -426,13 +420,27 @@ async function enrichConversationWithDetails(
 }
 
 // ============================================
-// TIMESTAMP PARSING - Handles seconds and milliseconds
+// TIMESTAMP PARSING - Handles seconds, milliseconds, AND ISO strings
 // ============================================
 
 function parseTimestampToDate(ts: number | string): string | null {
   if (!ts) return null;
   
-  const tsNum = typeof ts === 'string' ? Number(ts) : ts;
+  const tsStr = String(ts).trim();
+  
+  // Check if it's an ISO date string (e.g., "2025-12-07T07:56:05Z" or "2025-12-07 07:56:05")
+  if (tsStr.includes('-') && tsStr.length >= 10) {
+    // Try to parse as ISO date
+    const dateMatch = tsStr.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (dateMatch) {
+      const [, year, month, day] = dateMatch;
+      console.log(`  Parsed ISO date: ${tsStr} -> ${year}-${month}-${day}`);
+      return `${year}-${month}-${day}`;
+    }
+  }
+  
+  // Handle Unix timestamp (seconds or milliseconds)
+  const tsNum = Number(tsStr);
   
   if (isNaN(tsNum) || tsNum <= 0) return null;
   
@@ -698,6 +706,9 @@ function parseConversationRow(row: ConversationRow, adminsMap: Record<string, st
   let metricDate: string;
   let dateIsFromExport = false;
   
+  // Log raw date values for debugging
+  console.log(`  Raw dates for ${row.conversation_id}: started_at=${row.conversation_started_at}, closed_at=${row.conversation_last_closed_at}`);
+  
   // Use conversation_started_at first (this is when the conversation actually started)
   const ts = row.conversation_started_at || row.conversation_last_closed_at || "";
 
@@ -709,9 +720,11 @@ function parseConversationRow(row: ConversationRow, adminsMap: Record<string, st
       console.log(`  Export date for ${row.conversation_id}: ${metricDate} (from ${row.conversation_started_at ? 'started_at' : 'closed_at'})`);
     } else {
       metricDate = new Date().toISOString().split("T")[0];
+      console.log(`  Failed to parse date from: ${ts}`);
     }
   } else {
     metricDate = new Date().toISOString().split("T")[0];
+    console.log(`  No date found in export, using today`);
   }
 
   const agentRaw =
