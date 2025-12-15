@@ -191,75 +191,122 @@ export function AgentDashboard() {
     }
   };
 
-  const applyFilters = async () => {
-    let filtered = [...metrics];
+  /**
+ * FIXED applyFilters function for AgentDashboard.tsx
+ * 
+ * REPLACE lines 194-262 in your AgentDashboard.tsx with this code
+ * 
+ * KEY FIX: Timezone-safe date comparison using substring extraction
+ * instead of Date object comparisons
+ */
 
-    // Apply date range filter - compare dates only (ignoring time/timezone)
-    const { startDate, endDate } = getDateRange();
-    if (startDate && endDate) {
-      // Normalize dates to YYYY-MM-DD strings for comparison
-      const startStr = startDate.toISOString().split('T')[0];
-      const endStr = endDate.toISOString().split('T')[0];
+const applyFilters = async () => {
+  let filtered = [...metrics];
+
+  // DEBUG - Remove after confirming fix works
+  console.log('=== FILTER DEBUG ===');
+  console.log('Total metrics:', metrics.length);
+  console.log('Sample metric_date:', metrics[0]?.metric_date);
+
+  // Apply date range filter - TIMEZONE SAFE
+  const { startDate, endDate } = getDateRange();
+  if (startDate && endDate) {
+    // Extract YYYY-MM-DD using LOCAL date components (not UTC conversion)
+    const startYear = startDate.getFullYear();
+    const startMonth = String(startDate.getMonth() + 1).padStart(2, '0');
+    const startDay = String(startDate.getDate()).padStart(2, '0');
+    const startStr = `${startYear}-${startMonth}-${startDay}`;
+
+    const endYear = endDate.getFullYear();
+    const endMonth = String(endDate.getMonth() + 1).padStart(2, '0');
+    const endDay = String(endDate.getDate()).padStart(2, '0');
+    const endStr = `${endYear}-${endMonth}-${endDay}`;
+
+    console.log('Date range:', startStr, 'to', endStr);
+
+    const beforeCount = filtered.length;
+    
+    filtered = filtered.filter(m => {
+      if (!m.metric_date) return false;
       
-      filtered = filtered.filter(m => {
-        // Extract just the date part from metric_date
-        const metricDateStr = m.metric_date ? m.metric_date.split('T')[0] : '';
-        return metricDateStr >= startStr && metricDateStr <= endStr;
-      });
+      // Extract just YYYY-MM-DD from metric_date (handles both formats)
+      // "2025-12-14" or "2025-12-14T00:00:00+00:00" -> "2025-12-14"
+      const metricDateStr = m.metric_date.substring(0, 10);
+      
+      const inRange = metricDateStr >= startStr && metricDateStr <= endStr;
+      return inRange;
+    });
+
+    console.log(`Date filter: ${beforeCount} -> ${filtered.length}`);
+  }
+
+  // Apply workspace filter (including 360 views)
+  if (selectedWorkspace !== 'all') {
+    const beforeCount = filtered.length;
+    
+    if (selectedWorkspace === '360_SkyPrivate') {
+      filtered = filtered.filter(m => m.workspace === 'SkyPrivate' && m.is_360_queue === true);
+    } else if (selectedWorkspace === '360_CamModelDirectory') {
+      filtered = filtered.filter(m => m.workspace === 'CamModelDirectory' && m.is_360_queue === true);
+    } else {
+      filtered = filtered.filter(m => m.workspace === selectedWorkspace);
     }
 
-    // Apply workspace filter (including 360 views)
-    if (selectedWorkspace !== 'all') {
-      if (selectedWorkspace === '360_SkyPrivate') {
-        filtered = filtered.filter(m => m.workspace === 'SkyPrivate' && m.is_360_queue === true);
-      } else if (selectedWorkspace === '360_CamModelDirectory') {
-        filtered = filtered.filter(m => m.workspace === 'CamModelDirectory' && m.is_360_queue === true);
+    console.log(`Workspace filter (${selectedWorkspace}): ${beforeCount} -> ${filtered.length}`);
+  }
+
+  // Apply reviewee (agent) filter
+  if (selectedReviewee !== 'all') {
+    const beforeCount = filtered.length;
+    filtered = filtered.filter(m => m.agent_name === selectedReviewee);
+    console.log(`Reviewee filter: ${beforeCount} -> ${filtered.length}`);
+  }
+
+  // Apply group filter
+  if (selectedGroup !== 'all') {
+    try {
+      const { data: groupMappings } = await supabase
+        .from('agent_group_mapping')
+        .select('agent_id')
+        .eq('group_id', selectedGroup);
+
+      if (groupMappings && groupMappings.length > 0) {
+        const agentIds = groupMappings.map(m => m.agent_id);
+        const beforeCount = filtered.length;
+        filtered = filtered.filter(m => agentIds.includes(m.agent_id));
+        console.log(`Group filter: ${beforeCount} -> ${filtered.length}`);
       } else {
-        filtered = filtered.filter(m => m.workspace === selectedWorkspace);
+        console.log('No group mappings found');
+        filtered = [];
       }
+    } catch (err) {
+      console.error('Error fetching group mappings:', err);
     }
+  }
 
-    // Apply reviewee (agent) filter
-    if (selectedReviewee !== 'all') {
-      filtered = filtered.filter(m => m.agent_name === selectedReviewee);
-    }
+  // Apply reviewer filter
+  if (selectedReviewer !== 'all') {
+    const reviewedConversations = allFeedback
+      .filter(f => f.reviewer_id === selectedReviewer)
+      .map(f => f.conversation_id);
+    const beforeCount = filtered.length;
+    filtered = filtered.filter(m => reviewedConversations.includes(m.conversation_id));
+    console.log(`Reviewer filter: ${beforeCount} -> ${filtered.length}`);
+  }
 
-    // Apply group filter
-    if (selectedGroup !== 'all') {
-      try {
-        const { data: groupMappings } = await supabase
-          .from('agent_group_mapping')
-          .select('agent_id')
-          .eq('group_id', selectedGroup);
+  // Filter by human review status
+  if (showHumanReviewedOnly) {
+    const conversationsWithHumanFeedback = new Set(allFeedback.map(f => f.conversation_id));
+    const beforeCount = filtered.length;
+    filtered = filtered.filter(m => conversationsWithHumanFeedback.has(m.conversation_id));
+    console.log(`Human reviewed filter: ${beforeCount} -> ${filtered.length}`);
+    console.log('Total human feedback records:', allFeedback.length);
+  }
 
-        if (groupMappings && groupMappings.length > 0) {
-          const agentIds = groupMappings.map(m => m.agent_id);
-          filtered = filtered.filter(m => agentIds.includes(m.agent_id));
-        } else {
-          filtered = [];
-        }
-      } catch (err) {
-        console.error('Error fetching group mappings:', err);
-      }
-    }
-
-    // Apply reviewer filter
-    if (selectedReviewer !== 'all') {
-      const reviewedConversations = allFeedback
-        .filter(f => f.reviewer_id === selectedReviewer)
-        .map(f => f.conversation_id);
-      filtered = filtered.filter(m => reviewedConversations.includes(m.conversation_id));
-    }
-
-    // FIXED: Filter by human review status using actual feedback data
-    // This checks if the conversation has ANY human feedback submitted
-    if (showHumanReviewedOnly) {
-      const conversationsWithHumanFeedback = new Set(allFeedback.map(f => f.conversation_id));
-      filtered = filtered.filter(m => conversationsWithHumanFeedback.has(m.conversation_id));
-    }
-
-    setFilteredMetrics(filtered);
-  };
+  console.log('=== FINAL COUNT:', filtered.length, '===');
+  
+  setFilteredMetrics(filtered);
+};
 
   const uniqueReviewers = Array.from(
     new Set(allFeedback.map(f => f.reviewer_id))
