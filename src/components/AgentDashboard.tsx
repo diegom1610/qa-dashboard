@@ -148,7 +148,7 @@ const fetchData = async () => {
     const { data: feedbackData, error: feedbackError } = await supabase
       .from('human_feedback')
       .select('*')
-      .order('created_at', { ascending: false }) as { data: HumanFeedback[] | null; error: any };
+      .order('created_at', { ascending: false });
 
     if (feedbackError) throw feedbackError;
 
@@ -163,7 +163,7 @@ const fetchData = async () => {
       .from('qa_metrics')
       .select('*')
       .order('metric_date', { ascending: false })
-      .limit(10000) as { data: QAMetric[] | null; error: any };
+      .limit(10000);
 
     if (recentMetricsError) throw recentMetricsError;
 
@@ -171,13 +171,13 @@ const fetchData = async () => {
 
     // Step 4: Fetch metrics specifically for human-reviewed conversations
     // This ensures they're included even if their metric_date is older
-    let reviewedMetricsData: QAMetric[] = [];
+    let reviewedMetricsData: typeof recentMetricsData = [];
     
     if (reviewedConversationIds.length > 0) {
       const { data: reviewedData, error: reviewedError } = await supabase
         .from('qa_metrics')
         .select('*')
-        .in('conversation_id', reviewedConversationIds) as { data: QAMetric[] | null; error: any };
+        .in('conversation_id', reviewedConversationIds);
 
       if (reviewedError) {
         console.error('Error fetching reviewed metrics:', reviewedError);
@@ -188,7 +188,7 @@ const fetchData = async () => {
     }
 
     // Step 5: Merge the two sets, removing duplicates
-    const metricsMap = new Map<string, QAMetric>();
+    const metricsMap = new Map<string, typeof recentMetricsData[0]>();
     
     // Add recent metrics first
     (recentMetricsData || []).forEach(metric => {
