@@ -123,73 +123,148 @@ export function AgentDashboard() {
     }
   };
 
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      setError(null);
+  /**
+ * FIXED fetchData function for AgentDashboard.tsx
+ * 
+ * PROBLEM: The original code loads only the 1000 most recent metrics by metric_date.
+ * Human-reviewed conversations may have older metric_dates and get excluded.
+ * 
+ * SOLUTION: 
+ * 1. First fetch human_feedback to get all reviewed conversation_ids
+ * 2. Then fetch metrics in two batches:
+ *    - Recent metrics (limited to 10000)
+ *    - Metrics specifically for human-reviewed conversations (no limit)
+ * 3. Merge the two sets, removing duplicates
+ * 
+ * REPLACE the fetchData function (lines 126-192) with this code
+ */
 
-      const { data: metricsData, error: metricsError } = await supabase
+const fetchData = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+
+    // Step 1: Fetch ALL human feedback first
+    const { data: feedbackData, error: feedbackError } = await supabase
+      .from('human_feedback')
+      .select('*')
+      .order('created_at', { ascending: false }) as { data: HumanFeedback[] | null; error: any };
+
+    if (feedbackError) throw feedbackError;
+
+    console.log('Human feedback loaded:', feedbackData?.length || 0);
+
+    // Step 2: Get unique conversation IDs that have human feedback
+    const reviewedConversationIds = [...new Set((feedbackData || []).map(f => f.conversation_id))];
+    console.log('Unique reviewed conversation IDs:', reviewedConversationIds.length);
+
+    // Step 3: Fetch recent metrics (main batch)
+    const { data: recentMetricsData, error: recentMetricsError } = await supabase
+      .from('qa_metrics')
+      .select('*')
+      .order('metric_date', { ascending: false })
+      .limit(10000) as { data: QAMetric[] | null; error: any };
+
+    if (recentMetricsError) throw recentMetricsError;
+
+    console.log('Recent metrics loaded:', recentMetricsData?.length || 0);
+
+    // Step 4: Fetch metrics specifically for human-reviewed conversations
+    // This ensures they're included even if their metric_date is older
+    let reviewedMetricsData: QAMetric[] = [];
+    
+    if (reviewedConversationIds.length > 0) {
+      const { data: reviewedData, error: reviewedError } = await supabase
         .from('qa_metrics')
         .select('*')
-        .order('metric_date', { ascending: false })
-        .limit(10000);
+        .in('conversation_id', reviewedConversationIds) as { data: QAMetric[] | null; error: any };
 
-      if (metricsError) throw metricsError;
-
-      const { data: feedbackData, error: feedbackError } = await supabase
-        .from('human_feedback')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(10000);
-
-      if (feedbackError) throw feedbackError;
-
-      // Manually join human_feedback with metrics AND UPDATE rating_source
-      const metricsWithFeedback = (metricsData || []).map(metric => {
-        const humanFeedback = (feedbackData || []).filter(f => f.conversation_id === metric.conversation_id);
-        
-        // UPDATE rating_source based on available feedback
-        let ratingSource = metric.rating_source || 'none';
-        if (humanFeedback.length > 0) {
-          ratingSource = metric.ai_score !== null ? 'both' : 'human';
-        } else if (metric.ai_score !== null) {
-          ratingSource = 'ai';
-        }
-        
-        return {
-          ...metric,
-          human_feedback: humanFeedback,
-          rating_source: ratingSource,
-        };
-      });
-
-      const { data: workspacesData, error: workspacesError } = await supabase
-        .from('workspaces')
-        .select('*')
-        .eq('active', true)
-        .order('display_name');
-
-      if (workspacesError) throw workspacesError;
-
-      const { data: groupsData, error: groupsError } = await supabase
-        .from('agent_groups')
-        .select('*')
-        .eq('active', true)
-        .order('display_name');
-
-      if (groupsError) throw groupsError;
-
-      setMetrics(metricsWithFeedback);
-      setAllFeedback(feedbackData || []);
-      setWorkspaces(workspacesData || []);
-      setGroups(groupsData || []);
-    } catch (err) {
-      console.error('Error fetching data:', err);
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setLoading(false);
+      if (reviewedError) {
+        console.error('Error fetching reviewed metrics:', reviewedError);
+      } else {
+        reviewedMetricsData = reviewedData || [];
+        console.log('Reviewed metrics loaded:', reviewedMetricsData.length);
+      }
     }
-  };
+
+    // Step 5: Merge the two sets, removing duplicates
+    const metricsMap = new Map<string, QAMetric>();
+    
+    // Add recent metrics first
+    (recentMetricsData || []).forEach(metric => {
+      metricsMap.set(metric.conversation_id, metric);
+    });
+    
+    // Add/overwrite with reviewed metrics (ensures they're included)
+    reviewedMetricsData.forEach(metric => {
+      metricsMap.set(metric.conversation_id, metric);
+    });
+
+    const mergedMetricsData = Array.from(metricsMap.values());
+    console.log('Merged metrics total:', mergedMetricsData.length);
+
+    // Step 6: Join human_feedback with metrics AND UPDATE rating_source
+    const metricsWithFeedback = mergedMetricsData.map(metric => {
+      const humanFeedback = (feedbackData || []).filter(f => f.conversation_id === metric.conversation_id);
+      
+      // UPDATE rating_source based on available feedback
+      let ratingSource = metric.rating_source || 'none';
+      if (humanFeedback.length > 0) {
+        ratingSource = metric.ai_score !== null ? 'both' : 'human';
+      } else if (metric.ai_score !== null) {
+        ratingSource = 'ai';
+      }
+      
+      return {
+        ...metric,
+        human_feedback: humanFeedback,
+        rating_source: ratingSource,
+      };
+    });
+
+    // Sort by metric_date descending after merge
+    metricsWithFeedback.sort((a, b) => {
+      const dateA = a.metric_date || '';
+      const dateB = b.metric_date || '';
+      return dateB.localeCompare(dateA);
+    });
+
+    const { data: workspacesData, error: workspacesError } = await supabase
+      .from('workspaces')
+      .select('*')
+      .eq('active', true)
+      .order('display_name');
+
+    if (workspacesError) throw workspacesError;
+
+    const { data: groupsData, error: groupsError } = await supabase
+      .from('agent_groups')
+      .select('*')
+      .eq('active', true)
+      .order('display_name');
+
+    if (groupsError) throw groupsError;
+
+    setMetrics(metricsWithFeedback);
+    setAllFeedback(feedbackData || []);
+    setWorkspaces(workspacesData || []);
+    setGroups(groupsData || []);
+
+    // Debug: Verify human-reviewed conversations are in metrics
+    const loadedConvIds = new Set(metricsWithFeedback.map(m => m.conversation_id));
+    const missingReviewed = reviewedConversationIds.filter(id => !loadedConvIds.has(id));
+    console.log('Missing reviewed conversations:', missingReviewed.length);
+    if (missingReviewed.length > 0) {
+      console.log('Missing IDs:', missingReviewed.slice(0, 5));
+    }
+
+  } catch (err) {
+    console.error('Error fetching data:', err);
+    setError(err instanceof Error ? err.message : 'An error occurred');
+  } finally {
+    setLoading(false);
+  }
+};
 
   /**
  * FIXED applyFilters function for AgentDashboard.tsx
