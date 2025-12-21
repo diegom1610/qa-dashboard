@@ -71,7 +71,6 @@ function shouldSkipPart(part: any): boolean {
     'tag_added',
     'tag_removed',
     'close',
-    'open',
     'snoozed',
     'unsnoozed',
     'state_change',
@@ -87,6 +86,18 @@ function shouldSkipPart(part: any): boolean {
 
   if (alwaysSkipTypes.includes(partType)) {
     return true;
+  }
+
+  // Special handling for "open" type messages
+  // These occur when customers reopen conversations
+  // Skip ONLY if they don't have content (just reopening event)
+  // Keep if they have actual message content
+  if (partType === 'open') {
+    if (!hasContent) {
+      return true; // Skip empty "reopen" events
+    }
+    // Keep "open" events that have message content
+    return false;
   }
 
   // Assignment events: skip ONLY if they don't have content
@@ -242,7 +253,7 @@ Deno.serve(async (req: Request) => {
     }
 
     const conversation = await intercomResponse.json();
-    console.log('✅ Fetched from Intercom');
+    console.log('âœ… Fetched from Intercom');
     console.log(`Conversation has ${conversation.conversation_parts?.conversation_parts?.length || 0} parts`);
 
     // Parse thread metadata
@@ -386,7 +397,7 @@ Deno.serve(async (req: Request) => {
 
     console.log(`Skipped ${skippedCount} conversation events/empty parts`);
 
-    console.log(`✅ Parsed ${messages.length} messages total`);
+    console.log(`âœ… Parsed ${messages.length} messages total`);
     console.log('Message body lengths:', messages.map(m => ({ name: m.author_name, length: m.body.length })));
 
     // Store in database
@@ -400,7 +411,7 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    console.log('✅ Stored in database');
+    console.log('âœ… Stored in database');
 
     // Return complete thread
     const result: ConversationThread = {
