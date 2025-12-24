@@ -136,14 +136,38 @@ supabase = SupabaseClient(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 # -----------------------------
 # Workspace & 360 Queue Detection
+# UPDATED: Using exact tag patterns from production
 # -----------------------------
 WORKSPACE_KEYWORDS = {
-    'SkyPrivate': ['skyprivate', 'sky private', 'sky-private'],
-    'CamModelDirectory': ['cmd', 'cammodeldirectory', 'cam model directory', 'cam-model-directory'],
+    'SkyPrivate': ['skyprivate', '# skyprivate'],
+    'CamModelDirectory': ['cmd', 'cammodeldirectory', '# cmd'],
 }
 
-BILLING_360_KEYWORDS = ['payment', 'billing', 'top-up', 'topup', 'top up', 'verification']
-CEQ_360_KEYWORDS = ['report', 'scammer', 'ceq', 'publicprofile', 'public profile']
+# UPDATED 360 Queue Tags (exact patterns from Intercom)
+# Billing 360 tags:
+#   - #Billing - Top-up issue
+#   - 3 - Billing verifications
+#   - 3 - Payments
+#   - 3 - Refunds
+BILLING_360_PATTERNS = [
+    'billing - top-up issue',
+    'billing verifications',
+    '3 - payments',
+    '3 - refunds',
+]
+
+# CEQ 360 tags:
+#   - 3 - CEQ verifications
+#   - 3 - Public profile
+#   - 3 - Reports
+#   - 3 - Scammers
+CEQ_360_PATTERNS = [
+    'ceq verifications',
+    'public profile',
+    '3 - reports',
+    '3 - scammers',
+]
+
 
 def determine_workspace(tags: List[str]) -> str:
     """Determine workspace from tags using CONTAINS logic"""
@@ -154,21 +178,45 @@ def determine_workspace(tags: List[str]) -> str:
     
     for workspace, keywords in WORKSPACE_KEYWORDS.items():
         for keyword in keywords:
-            if keyword in all_tags_lower:
+            if keyword.lower() in all_tags_lower:
                 return workspace
     
     return 'Unknown'
 
+
 def determine_360_queue(tags: List[str]) -> Tuple[bool, Optional[str]]:
-    """Determine if conversation is a 360 queue conversation"""
+    """
+    Determine if conversation is a 360 queue conversation.
+    
+    UPDATED: Uses exact tag patterns from production:
+    - Billing: "billing - top-up issue", "billing verifications", "3 - payments", "3 - refunds"
+    - CEQ: "ceq verifications", "public profile", "3 - reports", "3 - scammers"
+    
+    Returns: (is_360_queue, queue_type)
+             queue_type can be 'billing', 'ceq', 'both', or None
+    """
     if not tags:
         return False, None
     
+    # Join all tags into a single lowercase string for pattern matching
     all_tags_lower = ' '.join(t.lower() for t in tags)
     
-    is_billing = any(kw in all_tags_lower for kw in BILLING_360_KEYWORDS)
-    is_ceq = any(kw in all_tags_lower for kw in CEQ_360_KEYWORDS)
+    is_billing = False
+    is_ceq = False
     
+    # Check for billing 360 tags
+    for pattern in BILLING_360_PATTERNS:
+        if pattern.lower() in all_tags_lower:
+            is_billing = True
+            break
+    
+    # Check for CEQ 360 tags
+    for pattern in CEQ_360_PATTERNS:
+        if pattern.lower() in all_tags_lower:
+            is_ceq = True
+            break
+    
+    # Determine queue type
     if is_billing and is_ceq:
         return True, 'both'
     elif is_billing:
@@ -177,6 +225,7 @@ def determine_360_queue(tags: List[str]) -> Tuple[bool, Optional[str]]:
         return True, 'ceq'
     
     return False, None
+
 
 # -----------------------------
 # PII Redaction
@@ -569,7 +618,6 @@ def parse_conversation_row(row: Dict, admins_map: Dict[str, str]) -> Dict:
         "customer_satisfaction_score": None,
         "rating_source": "ai" if ai_score else "none",
         # These will be populated by enrichment
-        "tags": [],
         "workspace": "Unknown",
         "is_360_queue": False,
         "queue_type_360": None
@@ -659,12 +707,12 @@ def sync_conversations(start_unix: int, end_unix: int, enrich: bool = True) -> i
                 tags, workspace, is_360, queue_type = enrich_conversation_with_tags(conv["conversation_id"])
                 
                 if tags or workspace != 'Unknown':
-                    conv["tags"] = tags
+                    # Don't store tags in the record (causes JSONB/array issues)
                     conv["workspace"] = workspace
                     conv["is_360_queue"] = is_360
                     conv["queue_type_360"] = queue_type
                     enriched_count += 1
-                    logger.debug(f"✓ {conv['conversation_id']}: {workspace} | 360={is_360}")
+                    logger.debug(f"✓ {conv['conversation_id']}: {workspace} | 360={is_360} ({queue_type})")
                 else:
                     failed_count += 1
             
@@ -676,15 +724,8 @@ def sync_conversations(start_unix: int, end_unix: int, enrich: bool = True) -> i
     else:
         logger.info("Step 7: Skipping enrichment (disabled)")
     
-    # Step 8: Prepare for Supabase
-    # Remove tags field - the column type in Supabase may be incompatible
-    # Tags are already stored in conversation_threads table via fetch_conversation_thread.py
-    for conv in conversations:
-        # Remove tags to avoid array format issues
-        if "tags" in conv:
-            del conv["tags"]
-    
-    # Step 9: Upsert to Supabase
+    # Step 8: Upsert to Supabase
+    # NOTE: tags field removed to avoid JSONB/array format issues
     logger.info(f"Step 8: Upserting {len(conversations)} conversations to Supabase...")
     
     # Process in batches for reliability
@@ -729,6 +770,10 @@ def main():
     logger.info(f"Intercom -> Supabase Sync")
     logger.info(f"Date range: {start_date} to {end_date} ({args.days} days)")
     logger.info(f"Enrichment: {'disabled' if args.no_enrich else 'enabled'}")
+    logger.info(f"=" * 60)
+    logger.info(f"360 Queue Detection Tags:")
+    logger.info(f"  Billing: {BILLING_360_PATTERNS}")
+    logger.info(f"  CEQ: {CEQ_360_PATTERNS}")
     logger.info(f"=" * 60)
     
     try:

@@ -123,20 +123,17 @@ export function AgentDashboard() {
     }
   };
 
-  /**
- * FIXED fetchData function for AgentDashboard.tsx
+/**
+ * COMPLETE fetchData function for AgentDashboard.tsx
  * 
- * PROBLEM: The original code loads only the 1000 most recent metrics by metric_date.
- * Human-reviewed conversations may have older metric_dates and get excluded.
+ * This version includes ALL fixes:
+ * 1. Human-reviewed conversations loading (EXISTING - PRESERVED)
+ * 2. 360 queue conversations loading (NEW FIX)
+ * 3. Debug logging for verification (EXISTING - PRESERVED)
+ * 4. Rating source update logic (EXISTING - PRESERVED)
+ * 5. Proper sorting after merge (EXISTING - PRESERVED)
  * 
- * SOLUTION: 
- * 1. First fetch human_feedback to get all reviewed conversation_ids
- * 2. Then fetch metrics in two batches:
- *    - Recent metrics (limited to 10000)
- *    - Metrics specifically for human-reviewed conversations (no limit)
- * 3. Merge the two sets, removing duplicates
- * 
- * REPLACE the fetchData function (lines 126-192) with this code
+ * REPLACE the existing fetchData function (lines 126-267) in AgentDashboard.tsx
  */
 
 const fetchData = async () => {
@@ -187,7 +184,23 @@ const fetchData = async () => {
       }
     }
 
-    // Step 5: Merge the two sets, removing duplicates
+    // Step 5: Fetch ALL 360 queue conversations (NEW FIX)
+    // This ensures 360 queue conversations appear in filters even if outside top 10K
+    let queue360MetricsData: typeof recentMetricsData = [];
+    
+    const { data: queue360Data, error: queue360Error } = await supabase
+      .from('qa_metrics')
+      .select('*')
+      .eq('is_360_queue', true);
+
+    if (queue360Error) {
+      console.error('Error fetching 360 queue metrics:', queue360Error);
+    } else {
+      queue360MetricsData = queue360Data || [];
+      console.log('360 queue metrics loaded:', queue360MetricsData.length);
+    }
+
+    // Step 6: Merge all three sets, removing duplicates
     const metricsMap = new Map<string, typeof recentMetricsData[0]>();
     
     // Add recent metrics first
@@ -200,10 +213,15 @@ const fetchData = async () => {
       metricsMap.set(metric.conversation_id, metric);
     });
 
+    // Add/overwrite with 360 queue metrics (ensures they're included)
+    queue360MetricsData.forEach(metric => {
+      metricsMap.set(metric.conversation_id, metric);
+    });
+
     const mergedMetricsData = Array.from(metricsMap.values());
     console.log('Merged metrics total:', mergedMetricsData.length);
 
-    // Step 6: Join human_feedback with metrics AND UPDATE rating_source
+    // Step 7: Join human_feedback with metrics AND UPDATE rating_source
     const metricsWithFeedback = mergedMetricsData.map(metric => {
       const humanFeedback = (feedbackData || []).filter(f => f.conversation_id === metric.conversation_id);
       
@@ -258,6 +276,10 @@ const fetchData = async () => {
       console.log('Missing IDs:', missingReviewed.slice(0, 5));
     }
 
+    // Debug: Verify 360 queue conversations are in metrics
+    const loaded360Count = metricsWithFeedback.filter(m => m.is_360_queue === true).length;
+    console.log('360 queue conversations in loaded data:', loaded360Count);
+
   } catch (err) {
     console.error('Error fetching data:', err);
     setError(err instanceof Error ? err.message : 'An error occurred');
@@ -265,6 +287,8 @@ const fetchData = async () => {
     setLoading(false);
   }
 };
+
+
 
   /**
  * FIXED applyFilters function for AgentDashboard.tsx
