@@ -205,7 +205,9 @@ export function FeedbackPanel({
                     >
                       <Star
                         className={`w-6 h-6 ${
-                          starValue <= categoryScores[category.id as keyof typeof categoryScores] && starValue > 0
+                          starValue === 0 && categoryScores[category.id as keyof typeof categoryScores] > 0
+                            ? 'text-yellow-500 fill-yellow-500'
+                            : starValue > 0 && starValue <= categoryScores[category.id as keyof typeof categoryScores]
                             ? 'text-yellow-500 fill-yellow-500'
                             : starValue === 0 && categoryScores[category.id as keyof typeof categoryScores] === 0
                             ? 'text-red-400 fill-red-400'
