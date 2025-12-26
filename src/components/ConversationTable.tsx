@@ -30,6 +30,7 @@ interface ConversationTableProps {
   loading: boolean;
   onViewConversation?: (conversationId: string) => void;
   selectedConversationId?: string | null;
+  onFeedbackSubmitted?: () => void;
 }
 
 /**
@@ -43,7 +44,7 @@ interface ConversationTableProps {
  * - sortColumn: Which column is currently used for sorting
  * - sortDirection: 'asc' or 'desc'
  */
-export function ConversationTable({ metrics, loading, onViewConversation, selectedConversationId }: ConversationTableProps) {
+export function ConversationTable({ metrics, loading, onViewConversation, selectedConversationId, onFeedbackSubmitted }: ConversationTableProps) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [sortColumn, setSortColumn] = useState<keyof QAMetric>('metric_date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -256,7 +257,7 @@ export function ConversationTable({ metrics, loading, onViewConversation, select
                 className="px-4 py-3 text-left text-sm font-semibold text-slate-700 cursor-pointer hover:bg-slate-100 transition"
                 onClick={() => handleSort('ai_score')}
               >
-                AI Score (30%)
+                AI Score (Ref)
               </th>
               <th
                 className="px-4 py-3 text-left text-sm font-semibold text-slate-700 cursor-pointer hover:bg-slate-100 transition"
@@ -388,7 +389,7 @@ export function ConversationTable({ metrics, loading, onViewConversation, select
                                 </div>
                                 <div>
                                   <h4 className="text-lg font-semibold text-purple-900">
-                                    AI Analysis (30% Weight)
+                                    AI Analysis (Reference Only)
                                   </h4>
                                   <div className="flex items-center gap-2 mt-1">
                                     <span className="text-sm text-purple-700">AI Score:</span>
@@ -427,6 +428,7 @@ export function ConversationTable({ metrics, loading, onViewConversation, select
                           <FeedbackPanel
                             conversationId={metric.conversation_id}
                             agentName={metric.agent_name}
+                            onFeedbackSubmitted={onFeedbackSubmitted}
                           />
                         </div>
                       </td>

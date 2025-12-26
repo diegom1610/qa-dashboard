@@ -6,26 +6,34 @@ import { useAuth } from '../contexts/AuthContext';
 interface FeedbackPanelProps {
   conversationId: string;
   agentName: string;
+  onFeedbackSubmitted?: () => void;
 }
 
 const RATING_CATEGORIES = [
-  { id: 'logic_path', label: 'Logic Path', description: 'Clear and logical conversation flow' },
-  { id: 'information', label: 'Information', description: 'Accurate and complete information' },
-  { id: 'solution', label: 'Solution', description: 'Effective problem resolution' },
-  { id: 'communication', label: 'Communication', description: 'Clear and professional communication' },
-  { id: 'language_usage', label: 'Language Usage', description: 'Proper grammar and tone' },
+  { id: 'logic_path', label: 'Logic Path', description: 'Clear and logical conversation flow', min: 0, max: 4 },
+  { id: 'information', label: 'Information', description: 'Accurate and complete information', min: 0, max: 4 },
+  { id: 'solution', label: 'Solution', description: 'Effective problem resolution', min: 0, max: 4 },
+  { id: 'communication', label: 'Communication', description: 'Clear and professional communication', min: 0, max: 4 },
+  { id: 'language_usage', label: 'Language Usage', description: 'Proper grammar and tone', min: 0, max: 4 },
 ] as const;
 
 export function FeedbackPanel({
   conversationId,
   agentName,
+  onFeedbackSubmitted,
 }: FeedbackPanelProps) {
-  const [categoryScores, setCategoryScores] = useState({
-    logic_path: false,
-    information: false,
-    solution: false,
-    communication: false,
-    language_usage: false,
+  const [categoryScores, setCategoryScores] = useState<{
+    logic_path: number;
+    information: number;
+    solution: number;
+    communication: number;
+    language_usage: number;
+  }>({
+    logic_path: 0,
+    information: 0,
+    solution: 0,
+    communication: 0,
+    language_usage: 0,
   });
   const [feedbackText, setFeedbackText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -38,12 +46,12 @@ export function FeedbackPanel({
   const userHasRated = feedback.some((f) => f.reviewer_id === user?.id);
   const userFeedback = feedback.find((f) => f.reviewer_id === user?.id);
 
-  const totalStars = Object.values(categoryScores).filter(Boolean).length;
+  const totalStars = Object.values(categoryScores).reduce((sum, score) => sum + score, 0);
 
-  const toggleCategory = (categoryId: keyof typeof categoryScores) => {
+  const setCategoryScore = (categoryId: keyof typeof categoryScores, score: number) => {
     setCategoryScores((prev) => ({
       ...prev,
-      [categoryId]: !prev[categoryId],
+      [categoryId]: score,
     }));
   };
 
@@ -54,32 +62,42 @@ export function FeedbackPanel({
 
     if (totalStars === 0) {
       setSubmitStatus('error');
-      setErrorMessage('Please select at least one category');
+      setErrorMessage('Please rate at least one category above 0');
       return;
     }
 
     setIsSubmitting(true);
 
     try {
+      const ratedCategories = Object.keys(categoryScores).filter(
+        (key) => categoryScores[key as keyof typeof categoryScores] > 0
+      );
+
       await submitFeedback({
         conversation_id: conversationId,
         rating: totalStars,
         feedback_text: feedbackText.trim() || null,
-        categories: Object.keys(categoryScores).filter(
-          (key) => categoryScores[key as keyof typeof categoryScores]
-        ),
-        ...categoryScores,
+        categories: ratedCategories,
+        logic_path: categoryScores.logic_path > 0,
+        information: categoryScores.information > 0,
+        solution: categoryScores.solution > 0,
+        communication: categoryScores.communication > 0,
+        language_usage: categoryScores.language_usage > 0,
       });
 
       setSubmitStatus('success');
       setCategoryScores({
-        logic_path: false,
-        information: false,
-        solution: false,
-        communication: false,
-        language_usage: false,
+        logic_path: 0,
+        information: 0,
+        solution: 0,
+        communication: 0,
+        language_usage: 0,
       });
       setFeedbackText('');
+
+      if (onFeedbackSubmitted) {
+        onFeedbackSubmitted();
+      }
 
       setTimeout(() => {
         setSubmitStatus('idle');
@@ -113,20 +131,9 @@ export function FeedbackPanel({
 
         <div className="bg-white rounded-lg p-4 mb-4 border border-yellow-200">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-sm font-medium text-slate-700">Your Rating:</span>
-            <div className="flex gap-1">
-              {[1, 2, 3, 4, 5].map((star) => (
-                <Star
-                  key={star}
-                  className={`w-4 h-4 ${
-                    star <= userFeedback.rating
-                      ? 'text-yellow-500 fill-yellow-500'
-                      : 'text-slate-300'
-                  }`}
-                />
-              ))}
-            </div>
-            <span className="text-sm text-slate-600">({userFeedback.rating}/5)</span>
+            <span className="text-sm font-medium text-slate-700">Your Total Rating:</span>
+            <span className="text-lg font-bold text-slate-900">{userFeedback.rating} stars</span>
+            <span className="text-sm text-slate-600">(max 20)</span>
           </div>
           {userFeedback.feedback_text && (
             <p className="text-sm text-slate-600 mt-2">{userFeedback.feedback_text}</p>
@@ -159,52 +166,56 @@ export function FeedbackPanel({
               Rating Categories <span className="text-red-500">*</span>
             </label>
             <div className="flex items-center gap-2">
-              <div className="flex gap-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <Star
-                    key={star}
-                    className={`w-5 h-5 ${
-                      star <= totalStars
-                        ? 'text-yellow-500 fill-yellow-500'
-                        : 'text-slate-300'
-                    }`}
-                  />
-                ))}
-              </div>
+              <span className="text-lg font-bold text-slate-900">
+                {totalStars}
+              </span>
               <span className="text-sm font-medium text-slate-600">
-                {totalStars} / 5
+                / 20 stars
               </span>
             </div>
           </div>
 
           <p className="text-xs text-slate-500 mb-4">
-            Each selected category adds 1 star to the rating. Select all that apply.
+            Rate each category from 0 to 4 stars. Total score is the sum of all categories (max 20).
           </p>
 
-          <div className="space-y-3">
+          <div className="space-y-4">
             {RATING_CATEGORIES.map((category) => (
-              <label
+              <div
                 key={category.id}
-                className={`flex items-start gap-3 p-3 border-2 rounded-lg cursor-pointer transition ${
-                  categoryScores[category.id as keyof typeof categoryScores]
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-slate-200 hover:border-slate-300'
-                }`}
+                className="p-4 border-2 border-slate-200 rounded-lg hover:border-slate-300 transition"
               >
-                <input
-                  type="checkbox"
-                  checked={categoryScores[category.id as keyof typeof categoryScores]}
-                  onChange={() => toggleCategory(category.id as keyof typeof categoryScores)}
-                  className="mt-0.5 w-5 h-5 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
-                />
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-center justify-between mb-2">
+                  <div>
                     <span className="font-medium text-slate-900">{category.label}</span>
-                    <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
+                    <p className="text-xs text-slate-600 mt-0.5">{category.description}</p>
                   </div>
-                  <p className="text-xs text-slate-600 mt-0.5">{category.description}</p>
+                  <span className="text-sm font-semibold text-slate-700 ml-2">
+                    {categoryScores[category.id as keyof typeof categoryScores]} / 4
+                  </span>
                 </div>
-              </label>
+                <div className="flex gap-2 mt-2">
+                  {[0, 1, 2, 3, 4].map((starValue) => (
+                    <button
+                      key={starValue}
+                      type="button"
+                      onClick={() => setCategoryScore(category.id as keyof typeof categoryScores, starValue)}
+                      className="transition"
+                      title={`${starValue} stars`}
+                    >
+                      <Star
+                        className={`w-6 h-6 ${
+                          starValue <= categoryScores[category.id as keyof typeof categoryScores] && starValue > 0
+                            ? 'text-yellow-500 fill-yellow-500'
+                            : starValue === 0 && categoryScores[category.id as keyof typeof categoryScores] === 0
+                            ? 'text-red-400 fill-red-400'
+                            : 'text-slate-300 hover:text-slate-400'
+                        }`}
+                      />
+                    </button>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>

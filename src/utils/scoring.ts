@@ -2,41 +2,37 @@
  * SCORING UTILITIES
  *
  * PURPOSE:
- * Calculate weighted averages combining AI scores and human feedback ratings.
+ * Calculate scores based on human feedback ratings.
+ * AI scores are kept for reference only and do not affect the final score.
  *
- * WEIGHTING FORMULA (UPDATED):
- * - Human Feedback: 90% weight
- * - AI Score: 10% weight
+ * SCORING FORMULA:
+ * - Human Feedback: 100% weight
+ * - AI Score: Reference only (not included in calculation)
  *
  * EDGE CASES:
- * - Only AI score exists: Use 100% AI score
  * - Only human scores exist: Use 100% human average
+ * - Only AI score exists: Use AI score as fallback
  * - Neither exists: Return null
- * - AI score is 0: Valid score, not missing data
  */
 
-// Weight constants - easily adjustable
-const HUMAN_WEIGHT = 0.90;  // 90% weight for human feedback
-const AI_WEIGHT = 0.10;     // 10% weight for AI score
-
 /**
- * Calculate weighted average score
+ * Calculate score based on human feedback
  *
- * @param humanScores - Array of human feedback ratings (1-5 scale)
- * @param aiScore - AI-generated score (1-5 scale), nullable
- * @returns Weighted average score, or null if no data exists
+ * @param humanScores - Array of human feedback ratings (0-4 scale)
+ * @param aiScore - AI-generated score (for reference only), nullable
+ * @returns Human average score, or AI score if no human feedback exists, or null if no data
  *
  * @example
- * // Both AI and human scores (90% human, 10% AI)
- * calculateWeightedAverage([4, 5, 3], 4.5) // => 4.05 (90% of 4.0 + 10% of 4.5)
+ * // Human scores (AI score ignored)
+ * calculateWeightedAverage([3, 4, 2], 4.5) // => 3.0 (100% human average)
  *
  * @example
  * // Only human scores
- * calculateWeightedAverage([4, 5], null) // => 4.5 (100% human average)
+ * calculateWeightedAverage([3, 4], null) // => 3.5 (100% human average)
  *
  * @example
- * // Only AI score
- * calculateWeightedAverage([], 3.5) // => 3.5 (100% AI)
+ * // Only AI score (fallback)
+ * calculateWeightedAverage([], 3.5) // => 3.5 (AI as reference)
  *
  * @example
  * // No scores
@@ -54,26 +50,19 @@ export function calculateWeightedAverage(
     return null;
   }
 
-  // Only AI score - use 100% AI
+  // Only AI score (fallback for reference)
   if (!hasHumanScores && hasAiScore) {
     return aiScore;
   }
 
-  // Only human scores - use 100% human average
-  if (hasHumanScores && !hasAiScore) {
+  // Human scores exist - use 100% human feedback
+  if (hasHumanScores) {
     const humanAverage =
       humanScores.reduce((sum, score) => sum + score, 0) / humanScores.length;
     return humanAverage;
   }
 
-  // Both AI and human scores - apply 90/10 weighting
-  const humanAverage =
-    humanScores.reduce((sum, score) => sum + score, 0) / humanScores.length;
-  
-  // UPDATED: 90% human + 10% AI weighting
-  const weightedScore = humanAverage * HUMAN_WEIGHT + aiScore! * AI_WEIGHT;
-
-  return weightedScore;
+  return null;
 }
 
 /**
@@ -138,17 +127,4 @@ export function calculateAgentAverages(
   }
 
   return agentAverages;
-}
-
-/**
- * Get current weight configuration
- * Useful for displaying in the UI
- */
-export function getWeightConfiguration() {
-  return {
-    humanWeight: HUMAN_WEIGHT,
-    aiWeight: AI_WEIGHT,
-    humanPercentage: Math.round(HUMAN_WEIGHT * 100),
-    aiPercentage: Math.round(AI_WEIGHT * 100),
-  };
 }

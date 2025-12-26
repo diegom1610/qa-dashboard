@@ -29,6 +29,7 @@ interface UseFeedbackReturn {
   submitFeedback: (data: Omit<HumanFeedbackInsert, 'reviewer_id' | 'reviewer_name'>) => Promise<void>;
   updateFeedback: (id: string, data: Partial<HumanFeedbackInsert>) => Promise<void>;
   deleteFeedback: (id: string) => Promise<void>;
+  refetch: () => Promise<void>;
 }
 
 /**
@@ -334,5 +335,6 @@ export function useFeedback(conversationId?: string): UseFeedbackReturn {
     submitFeedback,
     updateFeedback,
     deleteFeedback,
+    refetch: fetchFeedback,
   };
 }

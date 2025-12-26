@@ -80,13 +80,13 @@ function calculateSummary(metrics: QAMetric[], allFeedback: HumanFeedback[]) {
    * AVERAGE WEIGHTED SCORE
    *
    * HOW:
-   * 1. For each conversation, calculate weighted score (90% human + 10% AI)
-   * 2. Average all weighted scores
+   * 1. For each conversation, calculate score based on human feedback (100%)
+   * 2. Average all scores
    * 3. Display with one decimal place
    *
-   * WHY WEIGHTED:
-   * Combines AI scores (10%) with human feedback (90%) for comprehensive evaluation.
-   * If only one type exists, uses 100% of that type.
+   * WHY 100% HUMAN:
+   * Uses only human feedback ratings for final score calculation.
+   * AI scores are kept for reference only.
    */
   const weightedScores: number[] = [];
 
@@ -166,7 +166,7 @@ export function MetricsGrid({ metrics, allFeedback }: MetricsGridProps) {
       value: summary.averageWeightedScore.toFixed(1),
       icon: Star,
       color: 'yellow',
-      description: '90% Human + 10% AI',
+      description: '100% Human Feedback',
     },
     {
       title: 'Resolution Rate',
