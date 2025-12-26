@@ -342,7 +342,7 @@ export function ConversationTable({ metrics, loading, onViewConversation, select
                         <div className="flex items-center gap-1">
                           <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />
                           <span className="text-sm font-medium text-slate-900">
-                            {weightedScore.toFixed(1)}
+                            {weightedScore.toFixed(1)}%
                           </span>
                           {hasHumanFeedback && (
                             <User className="w-3 h-3 text-blue-500 ml-1" title="Includes human feedback" />

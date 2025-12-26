@@ -2,12 +2,21 @@
  * SCORING UTILITIES
  *
  * PURPOSE:
- * Calculate scores based on human feedback ratings.
+ * Calculate scores based on human feedback ratings as percentages.
  * AI scores are kept for reference only and do not affect the final score.
  *
  * SCORING FORMULA:
- * - Human Feedback: 100% weight
- * - AI Score: Reference only (not included in calculation)
+ * - Rating Scale: 0-20 stars (5 categories × 4 stars each)
+ * - Each star = 5%
+ * - Each category max = 20% (4 stars × 5%)
+ * - Total range: 0% to 100%
+ * - Conversion: (rating / 20) × 100
+ *
+ * EXAMPLES:
+ * - 20/20 stars = 100%
+ * - 19/20 stars = 95%
+ * - 10/20 stars = 50%
+ * - 0/20 stars = 0%
  *
  * EDGE CASES:
  * - Only human scores exist: Use 100% human average
@@ -16,23 +25,23 @@
  */
 
 /**
- * Calculate score based on human feedback
+ * Calculate score based on human feedback (returns percentage 0-100)
  *
- * @param humanScores - Array of human feedback ratings (0-4 scale)
+ * @param humanScores - Array of human feedback ratings (0-20 scale)
  * @param aiScore - AI-generated score (for reference only), nullable
- * @returns Human average score, or AI score if no human feedback exists, or null if no data
+ * @returns Human average score as percentage (0-100), or AI score if no human feedback, or null if no data
  *
  * @example
  * // Human scores (AI score ignored)
- * calculateWeightedAverage([3, 4, 2], 4.5) // => 3.0 (100% human average)
+ * calculateWeightedAverage([15, 20, 10], 4.5) // => 75.0 (average 15/20 = 75%)
  *
  * @example
  * // Only human scores
- * calculateWeightedAverage([3, 4], null) // => 3.5 (100% human average)
+ * calculateWeightedAverage([19, 20], null) // => 97.5 (average 19.5/20 = 97.5%)
  *
  * @example
  * // Only AI score (fallback)
- * calculateWeightedAverage([], 3.5) // => 3.5 (AI as reference)
+ * calculateWeightedAverage([], 3.5) // => 70.0 (3.5/5 = 70%)
  *
  * @example
  * // No scores
@@ -50,16 +59,16 @@ export function calculateWeightedAverage(
     return null;
   }
 
-  // Only AI score (fallback for reference)
+  // Only AI score (fallback for reference) - convert from 0-5 scale to percentage
   if (!hasHumanScores && hasAiScore) {
-    return aiScore;
+    return (aiScore / 5) * 100;
   }
 
   // Human scores exist - use 100% human feedback
   if (hasHumanScores) {
     const humanAverage =
       humanScores.reduce((sum, score) => sum + score, 0) / humanScores.length;
-    return humanAverage;
+    return (humanAverage / 20) * 100;
   }
 
   return null;

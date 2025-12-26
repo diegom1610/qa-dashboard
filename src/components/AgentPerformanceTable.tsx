@@ -76,7 +76,7 @@ export function AgentPerformanceTable({ metrics, feedback }: AgentPerformanceTab
         ? data.scores.reduce((sum, score) => sum + score, 0) / data.scores.length
         : 0;
 
-      const iqs = (avgScore / 5) * 100;
+      const iqs = avgScore;
 
       agentStats.push({
         agentName,

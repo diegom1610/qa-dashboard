@@ -131,9 +131,9 @@ export function FeedbackPanel({
 
         <div className="bg-white rounded-lg p-4 mb-4 border border-yellow-200">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-sm font-medium text-slate-700">Your Total Rating:</span>
-            <span className="text-lg font-bold text-slate-900">{userFeedback.rating} stars</span>
-            <span className="text-sm text-slate-600">(max 20)</span>
+            <span className="text-sm font-medium text-slate-700">Your Score:</span>
+            <span className="text-lg font-bold text-slate-900">{((userFeedback.rating / 20) * 100).toFixed(1)}%</span>
+            <span className="text-sm text-slate-600">({userFeedback.rating}/20 stars)</span>
           </div>
           {userFeedback.feedback_text && (
             <p className="text-sm text-slate-600 mt-2">{userFeedback.feedback_text}</p>

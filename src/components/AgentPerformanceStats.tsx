@@ -33,7 +33,7 @@ export function AgentPerformanceStats({ metrics, feedback }: AgentPerformanceSta
       ? conversationScores.reduce((sum, score) => sum + score, 0) / conversationScores.length
       : 0;
 
-    const iqs = (avgScore / 5) * 100;
+    const iqs = avgScore;
 
     const totalReviews = feedback.length;
 
