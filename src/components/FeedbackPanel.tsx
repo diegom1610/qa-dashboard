@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react';
-import { Star, Send, CheckCircle, AlertCircle, Lock } from 'lucide-react';
+import { useState, FormEvent } from 'react';
+import { Star, CheckCircle, AlertCircle, Send, Lock } from 'lucide-react';
 import { useFeedback } from '../hooks/useFeedback';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -10,8 +10,8 @@ interface FeedbackPanelProps {
 }
 
 const RATING_CATEGORIES = [
-  { id: 'logic_path', label: 'Logic Path', description: 'Clear and logical conversation flow', min: 0, max: 4 },
-  { id: 'information', label: 'Information', description: 'Accurate and complete information', min: 0, max: 4 },
+  { id: 'logic_path', label: 'Logic Path', description: 'Following structured problem-solving approach', min: 0, max: 4 },
+  { id: 'information', label: 'Information', description: 'Providing accurate and complete information', min: 0, max: 4 },
   { id: 'solution', label: 'Solution', description: 'Effective problem resolution', min: 0, max: 4 },
   { id: 'communication', label: 'Communication', description: 'Clear and professional communication', min: 0, max: 4 },
   { id: 'language_usage', label: 'Language Usage', description: 'Proper grammar and tone', min: 0, max: 4 },

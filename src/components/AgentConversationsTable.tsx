@@ -1,95 +1,19 @@
 import { useState } from 'react';
-import { ChevronUp, ChevronDown, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { ChevronUp, ChevronDown, ExternalLink } from 'lucide-react';
 import type { QAMetric, HumanFeedback } from '../types/database';
 import { calculateConversationScore } from '../utils/scoring';
 
-interface AgentPerformanceTableProps {
+interface AgentConversationsTableProps {a
   metrics: QAMetric[];
   feedback: HumanFeedback[];
 }
 
-interface AgentStats {
-  agentName: string;
-  iqs: number;
-  trend: number;
-  reviews: number;
-  unseenReviews: number;
-  comments: number;
-}
-
-type SortField = 'agentName' | 'iqs' | 'reviews' | 'unseenReviews' | 'comments';
+type SortField = 'date' | 'agent' | 'score' | 'status';
 type SortDirection = 'asc' | 'desc';
 
-export function AgentPerformanceTable({ metrics, feedback }: AgentPerformanceTableProps) {
-  const [sortField, setSortField] = useState<SortField>('iqs');
+export function AgentConversationsTable({ metrics, feedback }: AgentConversationsTableProps) {
+  const [sortField, setSortField] = useState<SortField>('date');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
-
-  const calculateAgentStats = (): AgentStats[] => {
-    const agentMap = new Map<string, {
-      conversations: string[];
-      scores: number[];
-      reviewCount: number;
-      commentCount: number;
-    }>();
-
-    metrics.forEach((metric) => {
-      if (!agentMap.has(metric.agent_name)) {
-        agentMap.set(metric.agent_name, {
-          conversations: [],
-          scores: [],
-          reviewCount: 0,
-          commentCount: 0,
-        });
-      }
-
-      const agentData = agentMap.get(metric.agent_name)!;
-      agentData.conversations.push(metric.conversation_id);
-
-      const score = calculateConversationScore(
-        metric.conversation_id,
-        feedback,
-        metric.ai_score
-      );
-
-      if (score !== null) {
-        agentData.scores.push(score);
-      }
-    });
-
-    feedback.forEach((fb) => {
-      const metric = metrics.find(m => m.conversation_id === fb.conversation_id);
-      if (metric) {
-        const agentData = agentMap.get(metric.agent_name);
-        if (agentData) {
-          agentData.reviewCount++;
-          if (fb.feedback_text && fb.feedback_text.trim().length > 0) {
-            agentData.commentCount++;
-          }
-        }
-      }
-    });
-
-    const agentStats: AgentStats[] = [];
-
-    agentMap.forEach((data, agentName) => {
-      const avgScore = data.scores.length > 0
-        ? data.scores.reduce((sum, score) => sum + score, 0) / data.scores.length
-        : 0;
-
-      const iqs = avgScore;
-
-      agentStats.push({
-        agentName,
-        iqs,
-        trend: Math.floor(Math.random() * 7) - 3,
-        reviews: data.reviewCount,
-        unseenReviews: 0,
-        comments: data.commentCount,
-      });
-    });
-
-    return agentStats;
-  };
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -100,16 +24,31 @@ export function AgentPerformanceTable({ metrics, feedback }: AgentPerformanceTab
     }
   };
 
-  const getSortedData = (): AgentStats[] => {
-    const data = calculateAgentStats();
+  const getSortedData = () => {
+    return [...metrics].sort((a, b) => {
+      let aVal: any;
+      let bVal: any;
 
-    return data.sort((a, b) => {
-      let aVal: any = a[sortField];
-      let bVal: any = b[sortField];
-
-      if (typeof aVal === 'string') {
-        aVal = aVal.toLowerCase();
-        bVal = bVal.toLowerCase();
+      switch (sortField) {
+        case 'date':
+          // Use string comparison for dates to avoid timezone issues
+          aVal = a.metric_date || '';
+          bVal = b.metric_date || '';
+          break;
+        case 'agent':
+          aVal = a.agent_name.toLowerCase();
+          bVal = b.agent_name.toLowerCase();
+          break;
+        case 'score':
+          aVal = calculateConversationScore(a.conversation_id, feedback, a.ai_score) || 0;
+          bVal = calculateConversationScore(b.conversation_id, feedback, b.ai_score) || 0;
+          break;
+        case 'status':
+          aVal = a.resolution_status || '';
+          bVal = b.resolution_status || '';
+          break;
+        default:
+          return 0;
       }
 
       if (sortDirection === 'asc') {
@@ -133,26 +72,28 @@ export function AgentPerformanceTable({ metrics, feedback }: AgentPerformanceTab
     );
   };
 
-  const getTrendIcon = (trend: number) => {
-    if (trend === 0) {
-      return <Minus className="w-3 h-3 text-slate-400" />;
-    }
-    return trend > 0 ? (
-      <TrendingUp className="w-3 h-3 text-green-600" />
-    ) : (
-      <TrendingDown className="w-3 h-3 text-red-600" />
-    );
+  const getConversationFeedback = (conversationId: string) => {
+    return feedback.filter(f => f.conversation_id === conversationId);
   };
 
-  const getTrendColor = (trend: number) => {
-    if (trend === 0) return 'text-slate-400';
-    return trend > 0 ? 'text-green-600' : 'text-red-600';
+  // FIXED: Timezone-safe date formatting
+  // Parse the date string directly without timezone conversion
+  const formatDate = (dateString: string) => {
+    if (!dateString) return 'N/A';
+
+    // Extract just the date part (YYYY-MM-DD) to avoid timezone shifts
+    const datePart = dateString.split('T')[0];
+    const [year, month, day] = datePart.split('-').map(Number);
+
+    // Create date using UTC to prevent timezone conversion
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${months[month - 1]} ${day}, ${year}`;
   };
 
   if (sortedData.length === 0) {
     return (
       <div className="bg-white rounded-lg border border-slate-200 p-8 text-center">
-        <p className="text-slate-600">No agent performance data available</p>
+        <p className="text-slate-600">No conversations found for the selected filters</p>
       </div>
     );
   }
@@ -160,104 +101,145 @@ export function AgentPerformanceTable({ metrics, feedback }: AgentPerformanceTab
   return (
     <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
       <div className="px-6 py-4 border-b border-slate-200">
-        <h2 className="text-lg font-semibold text-slate-900">Reviewee performance</h2>
+        <h2 className="text-lg font-semibold text-slate-900">Conversations</h2>
+        <p className="text-sm text-slate-600 mt-1">
+          Showing {sortedData.length} conversation{sortedData.length !== 1 ? 's' : ''}
+        </p>
       </div>
 
       <div className="overflow-x-auto">
         <table className="w-full">
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th
-                className="px-6 py-3 text-left cursor-pointer hover:bg-slate-100 transition"
-                onClick={() => handleSort('agentName')}
-              >
+              <th className="px-6 py-3 text-left">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <span>Reviewee</span>
-                  <SortIcon field="agentName" />
+                  <span>Conversation ID</span>
                 </div>
               </th>
               <th
                 className="px-6 py-3 text-left cursor-pointer hover:bg-slate-100 transition"
-                onClick={() => handleSort('iqs')}
+                onClick={() => handleSort('agent')}
               >
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <span>IQS</span>
-                  <SortIcon field="iqs" />
+                  <span>Agent</span>
+                  <SortIcon field="agent" />
+                </div>
+              </th>
+              <th
+                className="px-6 py-3 text-left cursor-pointer hover:bg-slate-100 transition"
+                onClick={() => handleSort('date')}
+              >
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <span>Date</span>
+                  <SortIcon field="date" />
+                </div>
+              </th>
+              <th
+                className="px-6 py-3 text-left cursor-pointer hover:bg-slate-100 transition"
+                onClick={() => handleSort('score')}
+              >
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <span>Score</span>
+                  <SortIcon field="score" />
                 </div>
               </th>
               <th className="px-6 py-3 text-left">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <span>Trend</span>
+                  <span>Human Reviews</span>
                 </div>
               </th>
               <th
                 className="px-6 py-3 text-left cursor-pointer hover:bg-slate-100 transition"
-                onClick={() => handleSort('reviews')}
+                onClick={() => handleSort('status')}
               >
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <span>Reviews</span>
-                  <SortIcon field="reviews" />
+                  <span>Status</span>
+                  <SortIcon field="status" />
                 </div>
               </th>
-              <th
-                className="px-6 py-3 text-left cursor-pointer hover:bg-slate-100 transition"
-                onClick={() => handleSort('unseenReviews')}
-              >
+              <th className="px-6 py-3 text-left">
                 <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <span>Reviews not seen</span>
-                  <SortIcon field="unseenReviews" />
-                </div>
-              </th>
-              <th
-                className="px-6 py-3 text-left cursor-pointer hover:bg-slate-100 transition"
-                onClick={() => handleSort('comments')}
-              >
-                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                  <span>Comments</span>
-                  <SortIcon field="comments" />
+                  <span>Actions</span>
                 </div>
               </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200">
-            {sortedData.map((agent, index) => (
-              <tr
-                key={index}
-                className="hover:bg-slate-50 transition"
-              >
-                <td className="px-6 py-4">
-                  <span className="font-medium text-slate-900">{agent.agentName}</span>
-                </td>
-                <td className="px-6 py-4">
-                  <div
-                    className={`inline-block px-3 py-1 rounded ${
-                      agent.iqs >= 95
+            {sortedData.map((metric) => {
+              const conversationFeedback = getConversationFeedback(metric.conversation_id);
+              const score = calculateConversationScore(
+                metric.conversation_id,
+                feedback,
+                metric.ai_score
+              );
+              const displayScore = score !== null ? score.toFixed(1) : 'N/A';
+
+              return (
+                <tr
+                  key={metric.conversation_id}
+                  className="hover:bg-slate-50 transition"
+                >
+                  <td className="px-6 py-4">
+                    <span className="font-mono text-xs text-slate-600">
+                      {metric.conversation_id.substring(0, 12)}...
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="font-medium text-slate-900">{metric.agent_name}</span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="text-slate-700">{formatDate(metric.metric_date)}</span>
+                  </td>
+                  <td className="px-6 py-4">
+                    {score !== null ? (
+                      <div
+                        className={`inline-block px-3 py-1 rounded ${
+                          score >= 4.5
+                            ? 'bg-green-100 text-green-800'
+                            : score >= 3.5
+                            ? 'bg-yellow-100 text-yellow-800'
+                            : 'bg-red-100 text-red-800'
+                        }`}
+                      >
+                        {displayScore}%
+                      </div>
+                    ) : (
+                      <span className="text-slate-400">N/A</span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-700">{conversationFeedback.length}</span>
+                      {conversationFeedback.length > 0 && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                          Human
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
+                      metric.resolution_status === 'completed'
                         ? 'bg-green-100 text-green-800'
-                        : agent.iqs >= 85
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}
-                  >
-                    {agent.iqs.toFixed(2)}%
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <div className={`flex items-center gap-1 ${getTrendColor(agent.trend)}`}>
-                    {getTrendIcon(agent.trend)}
-                    {agent.trend !== 0 && <span className="text-sm">{Math.abs(agent.trend)}%</span>}
-                  </div>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="text-slate-700">{agent.reviews}</span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="text-slate-700">{agent.unseenReviews}</span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className="text-slate-700">{agent.comments}</span>
-                </td>
-              </tr>
-            ))}
+                        : 'bg-slate-100 text-slate-800'
+                    }`}>
+                      {metric.resolution_status || 'unknown'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <a
+                      href={`https://app.intercom.com/a/apps/b37vb7kt/inbox/inbox/conversation/${metric.conversation_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800"
+                    >
+                      View
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
