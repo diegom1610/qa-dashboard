@@ -32,11 +32,11 @@ const CATEGORY_LABELS: Record<string, string> = {
 export function FeedbackHistory({ conversationId }: FeedbackHistoryProps) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editCategoryScores, setEditCategoryScores] = useState({
-    logic_path: false,
-    information: false,
-    solution: false,
-    communication: false,
-    language_usage: false,
+    logic_path: 0,
+    information: 0,
+    solution: 0,
+    communication: 0,
+    language_usage: 0,
   });
   const [editText, setEditText] = useState('');
 
@@ -47,11 +47,11 @@ export function FeedbackHistory({ conversationId }: FeedbackHistoryProps) {
   const startEditing = (item: HumanFeedback) => {
     setEditingId(item.id);
     setEditCategoryScores({
-      logic_path: item.logic_path || false,
-      information: item.information || false,
-      solution: item.solution || false,
-      communication: item.communication || false,
-      language_usage: item.language_usage || false,
+      logic_path: item.logic_path_score || 0,
+      information: item.information_score || 0,
+      solution: item.solution_score || 0,
+      communication: item.communication_score || 0,
+      language_usage: item.language_usage_score || 0,
     });
     setEditText(item.feedback_text || '');
   };
@@ -59,27 +59,27 @@ export function FeedbackHistory({ conversationId }: FeedbackHistoryProps) {
   const cancelEditing = () => {
     setEditingId(null);
     setEditCategoryScores({
-      logic_path: false,
-      information: false,
-      solution: false,
-      communication: false,
-      language_usage: false,
+      logic_path: 0,
+      information: 0,
+      solution: 0,
+      communication: 0,
+      language_usage: 0,
     });
     setEditText('');
   };
 
-  const toggleEditCategory = (categoryId: keyof typeof editCategoryScores) => {
+  const setCategoryScore = (categoryId: keyof typeof editCategoryScores, score: number) => {
     setEditCategoryScores((prev) => ({
       ...prev,
-      [categoryId]: !prev[categoryId],
+      [categoryId]: score,
     }));
   };
 
   const saveEdit = async (id: string) => {
-    const totalStars = Object.values(editCategoryScores).filter(Boolean).length;
+    const totalStars = Object.values(editCategoryScores).reduce((sum, score) => sum + score, 0);
 
     if (totalStars === 0) {
-      alert('Please select at least one category');
+      alert('Please rate at least one category above 0');
       return;
     }
 
@@ -88,9 +88,18 @@ export function FeedbackHistory({ conversationId }: FeedbackHistoryProps) {
         rating: totalStars,
         feedback_text: editText.trim() || null,
         categories: Object.keys(editCategoryScores).filter(
-          (key) => editCategoryScores[key as keyof typeof editCategoryScores]
+          (key) => editCategoryScores[key as keyof typeof editCategoryScores] > 0
         ),
-        ...editCategoryScores,
+        logic_path: editCategoryScores.logic_path > 0,
+        information: editCategoryScores.information > 0,
+        solution: editCategoryScores.solution > 0,
+        communication: editCategoryScores.communication > 0,
+        language_usage: editCategoryScores.language_usage > 0,
+        logic_path_score: editCategoryScores.logic_path,
+        information_score: editCategoryScores.information,
+        solution_score: editCategoryScores.solution,
+        communication_score: editCategoryScores.communication,
+        language_usage_score: editCategoryScores.language_usage,
       });
       cancelEditing();
     } catch (error) {
@@ -133,17 +142,13 @@ export function FeedbackHistory({ conversationId }: FeedbackHistoryProps) {
     });
   };
 
-  const getActiveCategoriesFromFeedback = (item: HumanFeedback): string[] => {
-    const categories: string[] = [];
-    if (item.logic_path) categories.push('logic_path');
-    if (item.information) categories.push('information');
-    if (item.solution) categories.push('solution');
-    if (item.communication) categories.push('communication');
-    if (item.language_usage) categories.push('language_usage');
-
-    if (categories.length === 0 && Array.isArray(item.categories)) {
-      return item.categories;
-    }
+  const getActiveCategoriesFromFeedback = (item: HumanFeedback): Array<{ id: string; score: number }> => {
+    const categories: Array<{ id: string; score: number }> = [];
+    if (item.logic_path_score > 0) categories.push({ id: 'logic_path', score: item.logic_path_score });
+    if (item.information_score > 0) categories.push({ id: 'information', score: item.information_score });
+    if (item.solution_score > 0) categories.push({ id: 'solution', score: item.solution_score });
+    if (item.communication_score > 0) categories.push({ id: 'communication', score: item.communication_score });
+    if (item.language_usage_score > 0) categories.push({ id: 'language_usage', score: item.language_usage_score });
 
     return categories;
   };
@@ -252,40 +257,59 @@ export function FeedbackHistory({ conversationId }: FeedbackHistoryProps) {
 
             {isEditing ? (
               <div className="space-y-3 mb-3">
-                <p className="text-xs text-slate-500">
-                  Select categories (each = 1 star):
+                <p className="text-xs text-slate-500 mb-3">
+                  Rate each category from 0 to 4 stars:
                 </p>
                 {RATING_CATEGORIES.map((category) => (
-                  <label
+                  <div
                     key={category.id}
-                    className={`flex items-center gap-3 p-2 border-2 rounded-lg cursor-pointer transition ${
-                      editCategoryScores[category.id as keyof typeof editCategoryScores]
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-slate-200 hover:border-slate-300'
-                    }`}
+                    className="p-3 border-2 border-slate-200 rounded-lg hover:border-slate-300 transition"
                   >
-                    <input
-                      type="checkbox"
-                      checked={editCategoryScores[category.id as keyof typeof editCategoryScores]}
-                      onChange={() => toggleEditCategory(category.id as keyof typeof editCategoryScores)}
-                      className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-2 focus:ring-blue-500"
-                    />
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between mb-2">
                       <span className="text-sm font-medium text-slate-900">{category.label}</span>
-                      <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+                      <span className="text-sm font-semibold text-slate-700">
+                        {editCategoryScores[category.id as keyof typeof editCategoryScores]} / 4
+                      </span>
                     </div>
-                  </label>
+                    <div className="flex gap-2">
+                      {[0, 1, 2, 3, 4].map((starValue) => (
+                        <button
+                          key={starValue}
+                          type="button"
+                          onClick={() => setCategoryScore(category.id as keyof typeof editCategoryScores, starValue)}
+                          className="transition"
+                          title={`${starValue} stars`}
+                        >
+                          <Star
+                            className={`w-6 h-6 ${
+                              starValue === 0 && editCategoryScores[category.id as keyof typeof editCategoryScores] > 0
+                                ? 'text-yellow-500 fill-yellow-500'
+                                : starValue > 0 && starValue <= editCategoryScores[category.id as keyof typeof editCategoryScores]
+                                ? 'text-yellow-500 fill-yellow-500'
+                                : starValue === 0 && editCategoryScores[category.id as keyof typeof editCategoryScores] === 0
+                                ? 'text-red-400 fill-red-400'
+                                : 'text-slate-300 hover:text-slate-400'
+                            }`}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
             ) : (
               <div className="flex flex-wrap gap-2 mb-3">
-                {activeCategories.map((categoryId: string) => (
+                {activeCategories.map((category) => (
                   <span
-                    key={categoryId}
+                    key={category.id}
                     className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded"
                   >
-                    {CATEGORY_LABELS[categoryId] || categoryId}
-                    <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+                    {CATEGORY_LABELS[category.id] || category.id}
+                    <span className="flex items-center gap-0.5">
+                      {Array.from({ length: category.score }, (_, i) => (
+                        <Star key={i} className="w-3 h-3 text-yellow-500 fill-yellow-500" />
+                      ))}
+                    </span>
                   </span>
                 ))}
               </div>

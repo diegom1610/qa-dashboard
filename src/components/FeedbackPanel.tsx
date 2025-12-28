@@ -83,6 +83,11 @@ export function FeedbackPanel({
         solution: categoryScores.solution > 0,
         communication: categoryScores.communication > 0,
         language_usage: categoryScores.language_usage > 0,
+        logic_path_score: categoryScores.logic_path,
+        information_score: categoryScores.information,
+        solution_score: categoryScores.solution,
+        communication_score: categoryScores.communication,
+        language_usage_score: categoryScores.language_usage,
       });
 
       setSubmitStatus('success');

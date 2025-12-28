@@ -56,10 +56,6 @@ export interface Database {
           workspace: string | null;
           raw_data: any;
           synced_at: string;
-          // NEW: Fields for workspace and 360 queue filtering
-          tags: string[] | null;
-          is_360_queue: boolean;
-          queue_type_360: string | null;
         };
         Insert: {
           id?: string;
@@ -76,10 +72,6 @@ export interface Database {
           workspace?: string | null;
           raw_data?: any;
           synced_at?: string;
-          // NEW: Fields for workspace and 360 queue filtering
-          tags?: string[] | null;
-          is_360_queue?: boolean;
-          queue_type_360?: string | null;
         };
         Update: {
           id?: string;
@@ -96,10 +88,6 @@ export interface Database {
           workspace?: string | null;
           raw_data?: any;
           synced_at?: string;
-          // NEW: Fields for workspace and 360 queue filtering
-          tags?: string[] | null;
-          is_360_queue?: boolean;
-          queue_type_360?: string | null;
         };
       };
       workspaces: {
@@ -217,6 +205,11 @@ export interface Database {
           solution: boolean;
           communication: boolean;
           language_usage: boolean;
+          logic_path_score: number;
+          information_score: number;
+          solution_score: number;
+          communication_score: number;
+          language_usage_score: number;
           created_at: string;
           updated_at: string;
         };
@@ -268,7 +261,6 @@ export interface Database {
 export type Agent = Database['public']['Tables']['agents']['Row'];
 export type QAMetric = Database['public']['Tables']['qa_metrics']['Row'] & {
   human_feedback?: HumanFeedback[];
-  rating_source: 'ai' | 'human' | 'both' | 'none';
 };
 export type HumanFeedback = Database['public']['Tables']['human_feedback']['Row'];
 export type Workspace = Database['public']['Tables']['workspaces']['Row'];

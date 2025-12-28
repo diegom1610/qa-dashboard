@@ -43,7 +43,7 @@ import type { FilterState } from '../types/database';
 const getDefaultDateRange = () => {
   const endDate = new Date();
   const startDate = new Date();
-  startDate.setDate(startDate.getDate() - 1);
+  startDate.setDate(startDate.getDate() - 30);
 
   return {
     startDate: startDate.toISOString().split('T')[0],
@@ -76,7 +76,12 @@ export function Dashboard() {
   const { user, signOut } = useAuth();
   const { agents, loading: agentsLoading } = useAgents(true);
   const { metrics, loading: metricsLoading, error, refetch } = useMetrics(filters);
-  const { feedback: allFeedback } = useFeedback();
+  const { feedback: allFeedback, refetch: refetchFeedback } = useFeedback();
+
+  const handleFeedbackSubmitted = () => {
+    refetchFeedback();
+    refetch();
+  };
 
   /**
    * HANDLE INTERCOM SYNC
@@ -93,7 +98,7 @@ export function Dashboard() {
           'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ days: 1 }),
+        body: JSON.stringify({ days: 30 }),
       });
 
       if (!response.ok) {
@@ -151,19 +156,32 @@ export function Dashboard() {
               </div>
             </div>
 
-            {/* User Menu - only Sync button, logout is in App.tsx */}
-            <div className="flex items-center gap-4 mr-48">
-              {/* Sync Intercom Button */}
+            {/* User Menu */}
+            <div className="flex items-center gap-4">
+              {/* Refresh Button */}
               <button
-                onClick={handleIntercomSync}
-                disabled={syncing}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 rounded-lg transition"
-                title="Sync conversations from Intercom (30 days)"
+                onClick={refetch}
+                className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
+                title="Refresh data"
               >
-                <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
-                <span className="hidden sm:inline">
-                  {syncing ? 'Syncing...' : 'Sync Intercom'}
-                </span>
+                <RefreshCw className="w-5 h-5" />
+              </button>
+
+              {/* User Info */}
+              <div className="hidden sm:block text-right">
+                <p className="text-sm font-medium text-slate-900">
+                  {user?.email}
+                </p>
+                <p className="text-xs text-slate-600">Reviewer</p>
+              </div>
+
+              {/* Logout Button */}
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Logout</span>
               </button>
             </div>
           </div>
@@ -202,6 +220,7 @@ export function Dashboard() {
                     setSelectedConversationId(conversationId);
                   }}
                   selectedConversationId={selectedConversationId}
+                  onFeedbackSubmitted={handleFeedbackSubmitted}
                 />
               </div>
 

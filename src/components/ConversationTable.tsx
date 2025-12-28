@@ -51,7 +51,14 @@ export function ConversationTable({ metrics, loading, onViewConversation, select
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
-  const { feedback: allFeedback } = useFeedback();
+  const { feedback: allFeedback, refetch: refetchFeedback } = useFeedback();
+
+  const handleFeedbackSubmitted = () => {
+    refetchFeedback();
+    if (onFeedbackSubmitted) {
+      onFeedbackSubmitted();
+    }
+  };
 
   /**
    * TOGGLE ROW EXPANSION
@@ -428,7 +435,7 @@ export function ConversationTable({ metrics, loading, onViewConversation, select
                           <FeedbackPanel
                             conversationId={metric.conversation_id}
                             agentName={metric.agent_name}
-                            onFeedbackSubmitted={onFeedbackSubmitted}
+                            onFeedbackSubmitted={handleFeedbackSubmitted}
                           />
                         </div>
                       </td>
