@@ -1,15 +1,23 @@
 import { useState, useEffect } from 'react';
-import { X, Calendar } from 'lucide-react';
+import { X, Calendar, Menu, BarChart3, Users, LogOut, RefreshCw } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import type { QAMetric, HumanFeedback, Workspace, AgentGroup } from '../types/database';
 import { AgentPerformanceStats } from './AgentPerformanceStats';
 import { AgentPerformanceTable } from './AgentPerformanceTable';
 import { AgentConversationsTable } from './AgentConversationsTable';
+import { Sidebar } from './Sidebar';
 
 type DateRangeType = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'last_7_days' | 'last_30_days' | 'last_90_days' | 'custom' | 'all';
 
-export function AgentDashboard() {
+type ViewMode = 'reviewer' | 'agent';
+
+interface AgentDashboardProps {
+  viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
+}
+
+export function AgentDashboard({ viewMode, onViewModeChange }: AgentDashboardProps) {
   const [metrics, setMetrics] = useState<QAMetric[]>([]);
   const [filteredMetrics, setFilteredMetrics] = useState<QAMetric[]>([]);
   const [allFeedback, setAllFeedback] = useState<HumanFeedback[]>([]);
@@ -27,6 +35,7 @@ export function AgentDashboard() {
   const [customEndDate, setCustomEndDate] = useState<string>('');
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
   const [showHumanReviewedOnly, setShowHumanReviewedOnly] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const { user, signOut } = useAuth();
 
@@ -455,15 +464,93 @@ const applyFilters = async () => {
     }
   };
 
+  const handleLogout = async () => {
+    await signOut();
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header - simplified since logout is now in App.tsx navigation */}
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+      {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pr-48">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">Agent Performance Dashboard</h1>
-              <p className="text-sm text-slate-600">Welcome, {user?.email}</p>
+            {/* Logo and Title */}
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
+                title="Open settings"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
+              <div className="inline-flex items-center justify-center w-10 h-10 bg-blue-600 rounded-lg">
+                <Users className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-slate-900">
+                  Agent Performance
+                </h1>
+                <p className="text-xs text-slate-600">
+                  Performance Analytics
+                </p>
+              </div>
+            </div>
+
+            {/* User Menu */}
+            <div className="flex items-center gap-3">
+              {/* View Mode Toggle */}
+              <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+                <button
+                  onClick={() => onViewModeChange('reviewer')}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition ${
+                    viewMode === 'reviewer'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  Reviewer
+                </button>
+                <button
+                  onClick={() => onViewModeChange('agent')}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition ${
+                    viewMode === 'agent'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  Agent
+                </button>
+              </div>
+
+              {/* Refresh Button */}
+              <button
+                onClick={fetchData}
+                className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
+                title="Refresh data"
+              >
+                <RefreshCw className="w-5 h-5" />
+              </button>
+
+              {/* User Info */}
+              <div className="hidden md:block text-right">
+                <p className="text-sm font-medium text-slate-900">
+                  {user?.email}
+                </p>
+                <p className="text-xs text-slate-600">Agent</p>
+              </div>
+
+              {/* Logout Button */}
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
+              >
+                <LogOut className="w-4 h-4" />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
             </div>
           </div>
         </div>

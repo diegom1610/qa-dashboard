@@ -20,7 +20,7 @@
  */
 
 import { useState } from 'react';
-import { LogOut, BarChart3, RefreshCw, X } from 'lucide-react';
+import { LogOut, BarChart3, RefreshCw, X, Menu, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useMetrics } from '../hooks/useMetrics';
 import { useAgents } from '../hooks/useAgents';
@@ -29,7 +29,15 @@ import { FilterBar } from './FilterBar';
 import { MetricsGrid } from './MetricsGrid';
 import { ConversationTable } from './ConversationTable';
 import { ConversationViewer } from './ConversationViewer';
+import { Sidebar } from './Sidebar';
 import type { FilterState } from '../types/database';
+
+type ViewMode = 'reviewer' | 'agent';
+
+interface DashboardProps {
+  viewMode: ViewMode;
+  onViewModeChange: (mode: ViewMode) => void;
+}
 
 /**
  * GET DEFAULT DATE RANGE
@@ -68,11 +76,11 @@ const initialFilters: FilterState = {
 /**
  * DASHBOARD COMPONENT
  */
-export function Dashboard() {
+export function Dashboard({ viewMode, onViewModeChange }: DashboardProps) {
   const [filters, setFilters] = useState<FilterState>(initialFilters);
   const [syncing, setSyncing] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'table' | 'preview'>('table');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const { user, signOut } = useAuth();
   const { agents, loading: agentsLoading } = useAgents(true);
   const { metrics, loading: metricsLoading, error, refetch } = useMetrics(filters);
@@ -137,12 +145,21 @@ export function Dashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo and Title */}
             <div className="flex items-center gap-3">
+              <button
+                onClick={() => setSidebarOpen(true)}
+                className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition"
+                title="Open settings"
+              >
+                <Menu className="w-5 h-5" />
+              </button>
               <div className="inline-flex items-center justify-center w-10 h-10 bg-blue-600 rounded-lg">
                 <BarChart3 className="w-6 h-6 text-white" />
               </div>
@@ -157,7 +174,33 @@ export function Dashboard() {
             </div>
 
             {/* User Menu */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
+              {/* View Mode Toggle */}
+              <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+                <button
+                  onClick={() => onViewModeChange('reviewer')}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition ${
+                    viewMode === 'reviewer'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <BarChart3 className="w-4 h-4" />
+                  Reviewer
+                </button>
+                <button
+                  onClick={() => onViewModeChange('agent')}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition ${
+                    viewMode === 'agent'
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-700 hover:bg-slate-200'
+                  }`}
+                >
+                  <Users className="w-4 h-4" />
+                  Agent
+                </button>
+              </div>
+
               {/* Refresh Button */}
               <button
                 onClick={refetch}
@@ -168,7 +211,7 @@ export function Dashboard() {
               </button>
 
               {/* User Info */}
-              <div className="hidden sm:block text-right">
+              <div className="hidden md:block text-right">
                 <p className="text-sm font-medium text-slate-900">
                   {user?.email}
                 </p>
