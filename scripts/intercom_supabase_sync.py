@@ -40,9 +40,12 @@ import re
 import logging
 import argparse
 import requests
+from dotenv import load_dotenv
 from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, List, Any, Tuple
 
+# Load environment variables from .env file
+load_dotenv()
 # -----------------------------
 # Configuration
 # -----------------------------
