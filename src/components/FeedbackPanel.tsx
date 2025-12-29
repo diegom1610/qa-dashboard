@@ -1,8 +1,14 @@
-import { useState, FormEvent, useEffect } from 'react';
-import { Star, CheckCircle, AlertCircle, Send, Lock, Shield } from 'lucide-react';
+import { useState, FormEvent, useEffect, useRef } from 'react';
+import { Star, CheckCircle, AlertCircle, Send, Lock, Shield, AtSign } from 'lucide-react';
 import { useFeedback } from '../hooks/useFeedback';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+
+interface UserSuggestion {
+  id: string;
+  email: string;
+  role: string;
+}
 
 interface FeedbackPanelProps {
   conversationId: string;
@@ -41,6 +47,11 @@ export function FeedbackPanel({
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const [userRole, setUserRole] = useState<string>('agent');
+  const [showMentions, setShowMentions] = useState(false);
+  const [mentionSearch, setMentionSearch] = useState('');
+  const [userSuggestions, setUserSuggestions] = useState<UserSuggestion[]>([]);
+  const [cursorPosition, setCursorPosition] = useState(0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { submitFeedback, feedback } = useFeedback(conversationId);
   const { user } = useAuth();
@@ -62,6 +73,99 @@ export function FeedbackPanel({
       .maybeSingle();
 
     setUserRole(data?.role || 'agent');
+  };
+
+  const fetchUsers = async (search: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('id, email, role');
+
+      if (error) {
+        console.error('Error fetching users from view:', error);
+        return;
+      }
+
+      if (data) {
+        const filtered = search
+          ? data.filter((u) => u.email?.toLowerCase().includes(search.toLowerCase()))
+          : data;
+
+        setUserSuggestions(
+          filtered.slice(0, 10).map((u) => ({
+            id: u.id,
+            email: u.email || '',
+            role: u.role || 'agent',
+          }))
+        );
+      }
+    } catch (error) {
+      console.error('Error fetching users:', error);
+    }
+  };
+
+  const handleFeedbackTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const text = e.target.value;
+    const cursor = e.target.selectionStart;
+    setFeedbackText(text);
+    setCursorPosition(cursor);
+
+    const textBeforeCursor = text.slice(0, cursor);
+    const atIndex = textBeforeCursor.lastIndexOf('@');
+
+    if (atIndex !== -1) {
+      const searchTerm = textBeforeCursor.slice(atIndex + 1);
+      if (!searchTerm.includes(' ')) {
+        setMentionSearch(searchTerm);
+        setShowMentions(true);
+        fetchUsers(searchTerm);
+      } else {
+        setShowMentions(false);
+      }
+    } else {
+      setShowMentions(false);
+    }
+  };
+
+  const insertMention = (email: string) => {
+    const textBeforeCursor = feedbackText.slice(0, cursorPosition);
+    const atIndex = textBeforeCursor.lastIndexOf('@');
+    const textAfterCursor = feedbackText.slice(cursorPosition);
+
+    const newText = feedbackText.slice(0, atIndex) + `@${email} ` + textAfterCursor;
+    setFeedbackText(newText);
+    setShowMentions(false);
+
+    setTimeout(() => {
+      if (textareaRef.current) {
+        const newCursorPos = atIndex + email.length + 2;
+        textareaRef.current.focus();
+        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+      }
+    }, 0);
+  };
+
+  const extractMentions = (text: string): string[] => {
+    const mentionRegex = /@([\w.-]+@[\w.-]+\.\w+)/g;
+    const mentions: string[] = [];
+    let match;
+
+    while ((match = mentionRegex.exec(text)) !== null) {
+      mentions.push(match[1]);
+    }
+
+    return mentions;
+  };
+
+  const getRoleBadgeColor = (role: string) => {
+    switch (role) {
+      case 'evaluator':
+        return 'bg-blue-100 text-blue-700';
+      case 'admin':
+        return 'bg-red-100 text-red-700';
+      default:
+        return 'bg-slate-100 text-slate-700';
+    }
   };
 
   const totalStars = Object.values(categoryScores).reduce((sum, score) => sum + score, 0);
@@ -91,7 +195,7 @@ export function FeedbackPanel({
         (key) => categoryScores[key as keyof typeof categoryScores] > 0
       );
 
-      await submitFeedback({
+      const feedbackData = await submitFeedback({
         conversation_id: conversationId,
         rating: totalStars,
         feedback_text: feedbackText.trim() || null,
@@ -107,6 +211,60 @@ export function FeedbackPanel({
         communication_score: categoryScores.communication,
         language_usage_score: categoryScores.language_usage,
       });
+
+      const mentions = extractMentions(feedbackText);
+
+      if (mentions.length > 0 && feedbackData) {
+        const { data: allUsers } = await supabase
+          .from('user_roles')
+          .select('id, email');
+
+        if (allUsers) {
+          const mentionedUsers = allUsers.filter((u) =>
+            mentions.includes(u.email || '')
+          );
+
+          if (mentionedUsers.length > 0) {
+            const feedbackCommentData = {
+              feedback_id: feedbackData.id,
+              conversation_id: conversationId,
+              commenter_id: user.id,
+              commenter_name: user.email || 'Unknown',
+              commenter_role: userRole,
+              comment_text: feedbackText.trim(),
+            };
+
+            const { data: commentData, error: commentError } = await supabase
+              .from('feedback_comments')
+              .insert(feedbackCommentData)
+              .select()
+              .single();
+
+            if (!commentError && commentData) {
+              const mentionInserts = mentionedUsers.map((u) => ({
+                comment_id: commentData.id,
+                mentioned_user_id: u.id,
+                mentioned_user_email: u.email || '',
+              }));
+
+              await supabase.from('comment_mentions').insert(mentionInserts);
+
+              await supabase.functions.invoke('send-comment-notification', {
+                body: {
+                  comment_id: commentData.id,
+                  mentions: mentionedUsers.map((u) => ({
+                    email: u.email,
+                    user_id: u.id,
+                  })),
+                  comment_text: feedbackText.trim(),
+                  commenter_name: user.email,
+                  conversation_id: conversationId,
+                },
+              });
+            }
+          }
+        }
+      }
 
       setSubmitStatus('success');
       setCategoryScores({
@@ -276,17 +434,51 @@ export function FeedbackPanel({
           >
             Detailed Feedback (Optional)
           </label>
-          <textarea
-            id="feedbackText"
-            value={feedbackText}
-            onChange={(e) => setFeedbackText(e.target.value)}
-            rows={4}
-            placeholder="Provide specific examples and context..."
-            className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition resize-none"
-          />
-          <p className="text-xs text-slate-500 mt-1">
-            {feedbackText.length} / 1000 characters
-          </p>
+          <div className="relative">
+            <textarea
+              ref={textareaRef}
+              id="feedbackText"
+              value={feedbackText}
+              onChange={handleFeedbackTextChange}
+              rows={4}
+              placeholder="Provide specific examples and context... Use @ to mention someone"
+              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition resize-none"
+            />
+
+            {showMentions && userSuggestions.length > 0 && (
+              <div className="absolute bottom-full mb-1 left-0 w-full bg-white border border-slate-300 rounded-lg shadow-lg max-h-48 overflow-y-auto z-10">
+                {userSuggestions.map((suggestion) => (
+                  <button
+                    key={suggestion.id}
+                    onClick={() => insertMention(suggestion.email)}
+                    type="button"
+                    className="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center gap-2 text-sm"
+                  >
+                    <AtSign className="w-4 h-4 text-slate-400" />
+                    <span className="font-medium text-slate-900">
+                      {suggestion.email}
+                    </span>
+                    <span
+                      className={`ml-auto px-2 py-0.5 text-xs font-medium rounded ${getRoleBadgeColor(
+                        suggestion.role
+                      )}`}
+                    >
+                      {suggestion.role}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center justify-between mt-1">
+            <p className="text-xs text-slate-500">
+              <AtSign className="w-3 h-3 inline mr-1" />
+              Type @ to mention someone
+            </p>
+            <p className="text-xs text-slate-500">
+              {feedbackText.length} / 1000 characters
+            </p>
+          </div>
         </div>
 
         {submitStatus === 'success' && (

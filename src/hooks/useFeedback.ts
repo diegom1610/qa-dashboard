@@ -26,7 +26,7 @@ interface UseFeedbackReturn {
   feedback: HumanFeedback[];
   loading: boolean;
   error: string | null;
-  submitFeedback: (data: Omit<HumanFeedbackInsert, 'reviewer_id' | 'reviewer_name'>) => Promise<void>;
+  submitFeedback: (data: Omit<HumanFeedbackInsert, 'reviewer_id' | 'reviewer_name'>) => Promise<HumanFeedback>;
   updateFeedback: (id: string, data: Partial<HumanFeedbackInsert>) => Promise<void>;
   deleteFeedback: (id: string) => Promise<void>;
   refetch: () => Promise<void>;
@@ -162,6 +162,8 @@ export function useFeedback(conversationId?: string): UseFeedbackReturn {
        * without waiting for the real-time subscription to fire.
        */
       setFeedback((prev) => [newFeedback, ...prev]);
+
+      return newFeedback;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to submit feedback');
       throw err;
