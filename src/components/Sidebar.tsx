@@ -10,15 +10,30 @@ interface SidebarProps {
 
 const TIMEZONES = [
   { value: 'UTC', label: 'UTC (Coordinated Universal Time)' },
+  // Americas
   { value: 'America/New_York', label: 'Eastern Time (ET)' },
   { value: 'America/Chicago', label: 'Central Time (CT)' },
   { value: 'America/Denver', label: 'Mountain Time (MT)' },
   { value: 'America/Los_Angeles', label: 'Pacific Time (PT)' },
+  { value: 'America/Bogota', label: 'Colombia Time (COT, UTC-5)' },
+  { value: 'America/Mexico_City', label: 'Mexico City (CST, UTC-6)' },
+  { value: 'America/Sao_Paulo', label: 'São Paulo (BRT, UTC-3)' },
+  { value: 'America/Buenos_Aires', label: 'Buenos Aires (ART, UTC-3)' },
+  // Europe
   { value: 'Europe/London', label: 'London (GMT/BST)' },
   { value: 'Europe/Paris', label: 'Paris (CET/CEST)' },
-  { value: 'Asia/Tokyo', label: 'Tokyo (JST)' },
-  { value: 'Asia/Shanghai', label: 'Shanghai (CST)' },
+  { value: 'Europe/Berlin', label: 'Berlin (CET/CEST)' },
+  { value: 'Europe/Madrid', label: 'Madrid (CET/CEST)' },
+  // Asia
+  { value: 'Asia/Dubai', label: 'Dubai (GST, UTC+4)' },
+  { value: 'Asia/Kolkata', label: 'India (IST, UTC+5:30)' },
+  { value: 'Asia/Bangkok', label: 'Bangkok (ICT, UTC+7)' },
+  { value: 'Asia/Singapore', label: 'Singapore (SGT, UTC+8)' },
+  { value: 'Asia/Tokyo', label: 'Tokyo (JST, UTC+9)' },
+  { value: 'Asia/Shanghai', label: 'Shanghai (CST, UTC+8)' },
+  // Oceania
   { value: 'Australia/Sydney', label: 'Sydney (AEDT/AEST)' },
+  { value: 'Pacific/Auckland', label: 'Auckland (NZDT/NZST)' },
 ];
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
