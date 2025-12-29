@@ -96,33 +96,27 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
 
   const fetchUsers = async (search: string) => {
     try {
-      const { data, error } = await supabase.rpc('get_users_for_mentions', {
-        search_term: search,
-      });
+      const { data, error } = await supabase
+        .from('user_roles')
+        .select('id, email, role');
 
       if (error) {
-        const { data: usersData } = await supabase
-          .from('user_settings')
-          .select('user_id, role')
-          .limit(10);
+        console.error('Error fetching users from view:', error);
+        return;
+      }
 
-        if (usersData) {
-          const userIds = usersData.map((u) => u.user_id);
-          const { data: authUsers } = await supabase.auth.admin.listUsers();
+      if (data) {
+        const filtered = search
+          ? data.filter((u) => u.email?.toLowerCase().includes(search.toLowerCase()))
+          : data;
 
-          const suggestions = authUsers?.users
-            .filter((u) => userIds.includes(u.id))
-            .filter((u) => u.email?.toLowerCase().includes(search.toLowerCase()))
-            .map((u) => ({
-              id: u.id,
-              email: u.email || '',
-              role: usersData.find((ud) => ud.user_id === u.id)?.role || 'agent',
-            })) || [];
-
-          setUserSuggestions(suggestions);
-        }
-      } else {
-        setUserSuggestions(data || []);
+        setUserSuggestions(
+          filtered.slice(0, 10).map((u) => ({
+            id: u.id,
+            email: u.email || '',
+            role: u.role || 'agent',
+          }))
+        );
       }
     } catch (error) {
       console.error('Error fetching users:', error);
@@ -205,20 +199,16 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
       const mentions = extractMentions(newComment);
 
       if (mentions.length > 0 && commentData) {
-        const { data: usersData } = await supabase
-          .from('user_settings')
-          .select('user_id')
-          .limit(100);
+        const { data: allUsers } = await supabase
+          .from('user_roles')
+          .select('id, email');
 
-        if (usersData) {
-          const userIds = usersData.map((u) => u.user_id);
-          const { data: authUsers } = await supabase.auth.admin.listUsers();
-
-          const mentionedUsers = authUsers?.users.filter((u) =>
+        if (allUsers) {
+          const mentionedUsers = allUsers.filter((u) =>
             mentions.includes(u.email || '')
           );
 
-          if (mentionedUsers) {
+          if (mentionedUsers.length > 0) {
             const mentionInserts = mentionedUsers.map((u) => ({
               comment_id: commentData.id,
               mentioned_user_id: u.id,

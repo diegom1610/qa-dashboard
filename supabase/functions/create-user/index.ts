@@ -12,135 +12,104 @@
  * In production, you should add authentication to prevent unauthorized access.
  */
 
-import { createClient } from 'npm:@supabase/supabase-js@2.57.4';
+import 'jsr:@supabase/functions-js/edge-runtime.d.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
 };
 
-Deno.serve(async (req: Request) => {
-  // Handle CORS preflight
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
+interface CreateUserRequest {
+  email: string;
+  password: string;
+  role?: 'agent' | 'evaluator' | 'admin';
+}
 
-  // Only allow POST requests
-  if (req.method !== 'POST') {
-    return new Response(
-      JSON.stringify({ error: 'Method not allowed. Use POST.' }),
-      {
-        status: 405,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
-    );
+Deno.serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, {
+      status: 200,
+      headers: corsHeaders,
+    });
   }
 
   try {
-    // Parse request body
-    const { email, password } = await req.json();
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Validate input
+    const { email, password, role = 'agent' }: CreateUserRequest = await req.json();
+
     if (!email || !password) {
       return new Response(
         JSON.stringify({
-          error: 'Missing required fields',
-          message: 'Both email and password are required',
+          error: 'Email and password are required',
         }),
         {
           status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+          },
         }
       );
     }
 
-    // Validate email format
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) {
-      return new Response(
-        JSON.stringify({
-          error: 'Invalid email format',
-          message: 'Please provide a valid email address',
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    // Validate password length
-    if (password.length < 6) {
-      return new Response(
-        JSON.stringify({
-          error: 'Password too short',
-          message: 'Password must be at least 6 characters',
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    // Initialize Supabase Admin client with SERVICE_ROLE_KEY
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
-
-    // Create user using Admin API
-    const { data, error } = await supabase.auth.admin.createUser({
+    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
       email,
       password,
-      email_confirm: true, // Auto-confirm email
+      email_confirm: true,
     });
 
-    if (error) {
-      console.error('Error creating user:', error);
-      return new Response(
-        JSON.stringify({
-          error: 'Failed to create user',
-          message: error.message,
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
+    if (authError) {
+      throw authError;
     }
 
-    // Success response
+    if (!authData.user) {
+      throw new Error('Failed to create user');
+    }
+
+    const { error: settingsError } = await supabase.from('user_settings').insert({
+      user_id: authData.user.id,
+      role: role,
+      timezone: 'UTC',
+    });
+
+    if (settingsError) {
+      console.error('Error creating user settings:', settingsError);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'User created successfully',
         user: {
-          id: data.user.id,
-          email: data.user.email,
-          created_at: data.user.created_at,
+          id: authData.user.id,
+          email: authData.user.email,
+          role: role,
         },
       }),
       {
-        status: 201,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        },
       }
     );
   } catch (error) {
-    console.error('Unexpected error:', error);
+    console.error('Error creating user:', error);
     return new Response(
       JSON.stringify({
-        error: 'Internal server error',
-        message: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : 'Failed to create user',
       }),
       {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+        },
       }
     );
   }

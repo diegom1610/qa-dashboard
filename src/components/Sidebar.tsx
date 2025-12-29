@@ -105,19 +105,26 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     setMessage(null);
 
     try {
+      const updateData: {
+        user_id: string;
+        timezone: string;
+        role?: string;
+        updated_at: string;
+      } = {
+        user_id: user?.id!,
+        timezone,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (role === 'admin') {
+        updateData.role = role;
+      }
+
       const { error } = await supabase
         .from('user_settings')
-        .upsert(
-          {
-            user_id: user?.id,
-            timezone,
-            role,
-            updated_at: new Date().toISOString(),
-          },
-          {
-            onConflict: 'user_id',
-          }
-        );
+        .upsert(updateData, {
+          onConflict: 'user_id',
+        });
 
       if (error) throw error;
 
@@ -244,26 +251,48 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
             {activeTab === 'settings' && (
               <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-semibold text-slate-900 mb-2">
-                    <Shield className="w-4 h-4 inline mr-2" />
-                    User Role
-                  </label>
-                  <select
-                    value={role}
-                    onChange={(e) => setRole(e.target.value as 'evaluator' | 'agent' | 'admin')}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition mb-2"
-                  >
-                    <option value="agent">Agent</option>
-                    <option value="evaluator">Evaluator</option>
-                    <option value="admin">Administrator</option>
-                  </select>
-                  <p className="text-xs text-slate-500 mb-4">
-                    <strong>Evaluators:</strong> Can submit feedback evaluations<br />
-                    <strong>Agents:</strong> Can only view and comment on evaluations<br />
-                    <strong>Admins:</strong> Full access to all features
-                  </p>
-                </div>
+                {role === 'admin' && (
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-900 mb-2">
+                      <Shield className="w-4 h-4 inline mr-2" />
+                      User Role
+                    </label>
+                    <select
+                      value={role}
+                      onChange={(e) => setRole(e.target.value as 'evaluator' | 'agent' | 'admin')}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition mb-2"
+                    >
+                      <option value="agent">Agent</option>
+                      <option value="evaluator">Evaluator</option>
+                      <option value="admin">Administrator</option>
+                    </select>
+                    <p className="text-xs text-slate-500 mb-4">
+                      <strong>Evaluators:</strong> Can submit feedback evaluations<br />
+                      <strong>Agents:</strong> Can only view and comment on evaluations<br />
+                      <strong>Admins:</strong> Full access to all features
+                    </p>
+                  </div>
+                )}
+
+                {role !== 'admin' && (
+                  <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <Shield className="w-5 h-5 text-slate-600 mt-0.5" />
+                      <div>
+                        <h4 className="text-sm font-semibold text-slate-900 mb-1">
+                          Current Role: <span className="capitalize text-blue-600">{role}</span>
+                        </h4>
+                        <p className="text-xs text-slate-600 mb-2">
+                          Only administrators can change user roles. Contact your admin if you need a role change.
+                        </p>
+                        <div className="text-xs text-slate-500">
+                          {role === 'evaluator' && '✓ You can submit feedback evaluations'}
+                          {role === 'agent' && '✓ You can view and comment on evaluations'}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-semibold text-slate-900 mb-2">
@@ -300,8 +329,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   </h4>
                   <ul className="text-xs text-blue-800 space-y-1">
                     <li>Roles control what actions you can perform</li>
-                    <li>Only evaluators can submit new feedback</li>
+                    <li>Only evaluators and admins can submit feedback</li>
                     <li>All users can view and comment</li>
+                    <li>Only admins can change user roles</li>
                   </ul>
                 </div>
               </div>
