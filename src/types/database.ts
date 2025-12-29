@@ -176,6 +176,7 @@ export interface Database {
           id: string;
           user_id: string;
           timezone: string;
+          role: string;
           created_at: string;
           updated_at: string;
         };
@@ -183,6 +184,7 @@ export interface Database {
           id?: string;
           user_id: string;
           timezone?: string;
+          role?: string;
           created_at?: string;
           updated_at?: string;
         };
@@ -190,8 +192,70 @@ export interface Database {
           id?: string;
           user_id?: string;
           timezone?: string;
+          role?: string;
           created_at?: string;
           updated_at?: string;
+        };
+      };
+      feedback_comments: {
+        Row: {
+          id: string;
+          feedback_id: string;
+          conversation_id: string;
+          commenter_id: string;
+          commenter_name: string;
+          commenter_role: string;
+          comment_text: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          feedback_id: string;
+          conversation_id: string;
+          commenter_id: string;
+          commenter_name: string;
+          commenter_role: string;
+          comment_text: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          feedback_id?: string;
+          conversation_id?: string;
+          commenter_id?: string;
+          commenter_name?: string;
+          commenter_role?: string;
+          comment_text?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      comment_mentions: {
+        Row: {
+          id: string;
+          comment_id: string;
+          mentioned_user_id: string;
+          mentioned_user_email: string;
+          notified: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          comment_id: string;
+          mentioned_user_id: string;
+          mentioned_user_email: string;
+          notified?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          comment_id?: string;
+          mentioned_user_id?: string;
+          mentioned_user_email?: string;
+          notified?: boolean;
+          created_at?: string;
         };
       };
       agent_group_mapping: {
@@ -290,6 +354,8 @@ export type Workspace = Database['public']['Tables']['workspaces']['Row'];
 export type AgentGroup = Database['public']['Tables']['agent_groups']['Row'];
 export type AgentWorkspaceMapping = Database['public']['Tables']['agent_workspace_mapping']['Row'];
 export type AgentGroupMapping = Database['public']['Tables']['agent_group_mapping']['Row'];
+export type FeedbackComment = Database['public']['Tables']['feedback_comments']['Row'];
+export type CommentMention = Database['public']['Tables']['comment_mentions']['Row'];
 
 export type AgentInsert = Database['public']['Tables']['agents']['Insert'];
 export type QAMetricInsert = Database['public']['Tables']['qa_metrics']['Insert'];

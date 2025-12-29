@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { X, Settings, Mail, Clock, User } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, Settings, Mail, Clock, User, Shield } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
 
@@ -40,9 +40,33 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'profile' | 'settings'>('profile');
   const [timezone, setTimezone] = useState('UTC');
+  const [role, setRole] = useState<'evaluator' | 'agent' | 'admin'>('agent');
   const [newEmail, setNewEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  useEffect(() => {
+    if (user && isOpen) {
+      fetchUserSettings();
+    }
+  }, [user, isOpen]);
+
+  const fetchUserSettings = async () => {
+    try {
+      const { data } = await supabase
+        .from('user_settings')
+        .select('timezone, role')
+        .eq('user_id', user?.id)
+        .maybeSingle();
+
+      if (data) {
+        setTimezone(data.timezone || 'UTC');
+        setRole(data.role || 'agent');
+      }
+    } catch (error) {
+      console.error('Error fetching settings:', error);
+    }
+  };
 
   const handleUpdateEmail = async () => {
     if (!newEmail || !newEmail.includes('@')) {
@@ -76,7 +100,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
     }
   };
 
-  const handleUpdateTimezone = async () => {
+  const handleUpdateSettings = async () => {
     setSaving(true);
     setMessage(null);
 
@@ -87,6 +111,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           {
             user_id: user?.id,
             timezone,
+            role,
             updated_at: new Date().toISOString(),
           },
           {
@@ -98,13 +123,13 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
 
       setMessage({
         type: 'success',
-        text: 'Timezone updated successfully',
+        text: 'Settings updated successfully',
       });
     } catch (error) {
-      console.error('Error updating timezone:', error);
+      console.error('Error updating settings:', error);
       setMessage({
         type: 'error',
-        text: error instanceof Error ? error.message : 'Failed to update timezone',
+        text: error instanceof Error ? error.message : 'Failed to update settings',
       });
     } finally {
       setSaving(false);
@@ -221,6 +246,27 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               <div className="space-y-6">
                 <div>
                   <label className="block text-sm font-semibold text-slate-900 mb-2">
+                    <Shield className="w-4 h-4 inline mr-2" />
+                    User Role
+                  </label>
+                  <select
+                    value={role}
+                    onChange={(e) => setRole(e.target.value as 'evaluator' | 'agent' | 'admin')}
+                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition mb-2"
+                  >
+                    <option value="agent">Agent</option>
+                    <option value="evaluator">Evaluator</option>
+                    <option value="admin">Administrator</option>
+                  </select>
+                  <p className="text-xs text-slate-500 mb-4">
+                    <strong>Evaluators:</strong> Can submit feedback evaluations<br />
+                    <strong>Agents:</strong> Can only view and comment on evaluations<br />
+                    <strong>Admins:</strong> Full access to all features
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-900 mb-2">
                     <Clock className="w-4 h-4 inline mr-2" />
                     Timezone
                   </label>
@@ -235,26 +281,27 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       </option>
                     ))}
                   </select>
-                  <button
-                    onClick={handleUpdateTimezone}
-                    disabled={saving}
-                    className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition font-medium"
-                  >
-                    {saving ? 'Saving...' : 'Save Timezone'}
-                  </button>
-                  <p className="text-xs text-slate-500 mt-2">
+                  <p className="text-xs text-slate-500 mb-4">
                     All dashboard times will be displayed in your selected timezone.
                   </p>
                 </div>
 
+                <button
+                  onClick={handleUpdateSettings}
+                  disabled={saving}
+                  className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition font-medium"
+                >
+                  {saving ? 'Saving...' : 'Save Settings'}
+                </button>
+
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <h4 className="text-sm font-semibold text-blue-900 mb-2">
-                    Why Timezone Matters
+                    About Roles
                   </h4>
                   <ul className="text-xs text-blue-800 space-y-1">
-                    <li>Accurate conversation timestamps</li>
-                    <li>Correct date range filtering</li>
-                    <li>Proper metrics aggregation</li>
+                    <li>Roles control what actions you can perform</li>
+                    <li>Only evaluators can submit new feedback</li>
+                    <li>All users can view and comment</li>
                   </ul>
                 </div>
               </div>

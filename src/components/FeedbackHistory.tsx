@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Star, Trash2, Edit, Save, X, Clock } from 'lucide-react';
 import { useFeedback } from '../hooks/useFeedback';
 import { useAuth } from '../contexts/AuthContext';
+import { FeedbackComments } from './FeedbackComments';
 import type { HumanFeedback } from '../types/database';
 
 interface FeedbackHistoryProps {
@@ -324,11 +325,18 @@ export function FeedbackHistory({ conversationId }: FeedbackHistoryProps) {
                 className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition resize-none"
               />
             ) : (
-              item.feedback_text && (
-                <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                  {item.feedback_text}
-                </p>
-              )
+              <>
+                {item.feedback_text && (
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap mb-3">
+                    {item.feedback_text}
+                  </p>
+                )}
+
+                <FeedbackComments
+                  feedbackId={item.id}
+                  conversationId={item.conversation_id}
+                />
+              </>
             )}
           </div>
         );

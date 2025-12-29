@@ -1,7 +1,8 @@
-import { useState, FormEvent } from 'react';
-import { Star, CheckCircle, AlertCircle, Send, Lock } from 'lucide-react';
+import { useState, FormEvent, useEffect } from 'react';
+import { Star, CheckCircle, AlertCircle, Send, Lock, Shield } from 'lucide-react';
 import { useFeedback } from '../hooks/useFeedback';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 interface FeedbackPanelProps {
   conversationId: string;
@@ -39,12 +40,29 @@ export function FeedbackPanel({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  const [userRole, setUserRole] = useState<string>('agent');
 
   const { submitFeedback, feedback } = useFeedback(conversationId);
   const { user } = useAuth();
 
   const userHasRated = feedback.some((f) => f.reviewer_id === user?.id);
   const userFeedback = feedback.find((f) => f.reviewer_id === user?.id);
+
+  useEffect(() => {
+    fetchUserRole();
+  }, [user]);
+
+  const fetchUserRole = async () => {
+    if (!user) return;
+
+    const { data } = await supabase
+      .from('user_settings')
+      .select('role')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    setUserRole(data?.role || 'agent');
+  };
 
   const totalStars = Object.values(categoryScores).reduce((sum, score) => sum + score, 0);
 
@@ -116,6 +134,30 @@ export function FeedbackPanel({
       setIsSubmitting(false);
     }
   };
+
+  const canSubmitFeedback = userRole === 'evaluator' || userRole === 'admin';
+
+  if (!canSubmitFeedback) {
+    return (
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+        <div className="flex items-start gap-3">
+          <Shield className="w-5 h-5 text-yellow-600 mt-0.5" />
+          <div>
+            <h4 className="text-sm font-semibold text-yellow-900 mb-1">
+              Evaluator Access Required
+            </h4>
+            <p className="text-sm text-yellow-800">
+              Only evaluators and administrators can submit feedback evaluations.
+              You can view existing feedback and add comments below.
+            </p>
+            <p className="text-xs text-yellow-700 mt-2">
+              Current role: <strong className="capitalize">{userRole}</strong>
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (userHasRated && userFeedback) {
     return (
