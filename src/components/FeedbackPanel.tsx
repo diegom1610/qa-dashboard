@@ -168,6 +168,22 @@ export function FeedbackPanel({
     }
   };
 
+  const getAgentEmailFromConversation = async (convId: string): Promise<string | null> => {
+    try {
+      const { data, error } = await supabase
+        .from('conversation_threads')
+        .select('agent_name')
+        .eq('conversation_id', convId)
+        .maybeSingle();
+
+      if (error || !data) return null;
+      return data.agent_name;
+    } catch (error) {
+      console.error('Error fetching agent email:', error);
+      return null;
+    }
+  };
+
   const totalStars = Object.values(categoryScores).reduce((sum, score) => sum + score, 0);
 
   const setCategoryScore = (categoryId: keyof typeof categoryScores, score: number) => {
@@ -211,6 +227,23 @@ export function FeedbackPanel({
         communication_score: categoryScores.communication,
         language_usage_score: categoryScores.language_usage,
       });
+
+      const agentEmail = await getAgentEmailFromConversation(conversationId);
+      if (agentEmail) {
+        try {
+          await supabase.functions.invoke('send-feedback-notification', {
+            body: {
+              agent_email: agentEmail,
+              reviewer_email: user.email,
+              rating: totalStars,
+              feedback_text: feedbackText.trim() || null,
+              conversation_id: conversationId,
+            },
+          });
+        } catch (notifError) {
+          console.error('Failed to send feedback notification:', notifError);
+        }
+      }
 
       const mentions = extractMentions(feedbackText);
 

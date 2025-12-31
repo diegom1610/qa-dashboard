@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { X, Settings, Mail, Clock, User, Shield } from 'lucide-react';
+import { X, Settings, Mail, Clock, User, Shield, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
+import { UserManagement } from './UserManagement';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -38,7 +39,7 @@ const TIMEZONES = [
 
 export function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<'profile' | 'settings'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'settings' | 'users'>('profile');
   const [timezone, setTimezone] = useState('UTC');
   const [role, setRole] = useState<'evaluator' | 'agent' | 'admin'>('agent');
   const [newEmail, setNewEmail] = useState('');
@@ -187,6 +188,19 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               <Settings className="w-4 h-4" />
               Settings
             </button>
+            {role === 'admin' && (
+              <button
+                onClick={() => setActiveTab('users')}
+                className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition ${
+                  activeTab === 'users'
+                    ? 'text-blue-600 border-b-2 border-blue-600'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Users className="w-4 h-4" />
+                Users
+              </button>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto p-4">
@@ -335,6 +349,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                   </ul>
                 </div>
               </div>
+            )}
+
+            {activeTab === 'users' && role === 'admin' && (
+              <UserManagement />
             )}
           </div>
         </div>
