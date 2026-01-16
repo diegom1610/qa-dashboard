@@ -351,13 +351,13 @@ const applyFilters = async () => {
   // Apply workspace filter (including 360 views)
   if (selectedWorkspace !== 'all') {
     const beforeCount = filtered.length;
-    
+
     if (selectedWorkspace === '360_SkyPrivate') {
       filtered = filtered.filter(m => m.workspace === 'SkyPrivate' && m.is_360_queue === true);
     } else if (selectedWorkspace === '360_CamModelDirectory') {
       filtered = filtered.filter(m => m.workspace === 'CamModelDirectory' && m.is_360_queue === true);
     } else {
-      filtered = filtered.filter(m => m.workspace === selectedWorkspace);
+      filtered = filtered.filter(m => m.workspace === selectedWorkspace && m.is_360_queue !== true);
     }
 
     console.log(`Workspace filter (${selectedWorkspace}): ${beforeCount} -> ${filtered.length}`);

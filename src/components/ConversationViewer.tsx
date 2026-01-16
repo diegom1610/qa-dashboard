@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Bot, Clock, Tag, AlertCircle } from 'lucide-react';
+import { User, Bot, Clock, Tag, AlertCircle, ExternalLink } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface Message {
@@ -155,6 +155,16 @@ export function ConversationViewer({ conversationId }: ConversationViewerProps) 
             <span className="text-xs font-mono text-slate-500 bg-slate-100 px-2 py-1 rounded border border-slate-200">
               ID: {thread.conversation_id}
             </span>
+            <a
+              href={`https://app.intercom.com/a/inbox/inbox/conversation/${thread.conversation_id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline"
+              title="Open in Intercom"
+            >
+              <ExternalLink className="w-3 h-3" />
+              Open in Intercom
+            </a>
           </div>
           <div className="flex items-center gap-2">
             {thread.cached && (

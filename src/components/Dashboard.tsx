@@ -232,7 +232,7 @@ export function Dashboard({ viewMode, onViewModeChange }: DashboardProps) {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <main className={`mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6 ${selectedConversationId ? 'max-w-[1600px]' : 'max-w-7xl'}`}>
         {/* Filter Section */}
         <FilterBar
           filters={filters}
@@ -254,8 +254,8 @@ export function Dashboard({ viewMode, onViewModeChange }: DashboardProps) {
           <>
             <MetricsGrid metrics={metrics} allFeedback={allFeedback} />
 
-            <div className={`grid gap-6 ${selectedConversationId ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
-              <div className={selectedConversationId ? 'lg:col-span-1' : 'col-span-1'}>
+            <div className={`grid gap-6 ${selectedConversationId ? 'grid-cols-1 xl:grid-cols-[minmax(600px,1fr)_minmax(500px,1fr)]' : 'grid-cols-1'}`}>
+              <div className={selectedConversationId ? 'xl:col-span-1 min-w-0' : 'col-span-1'}>
                 <ConversationTable
                   metrics={metrics}
                   loading={metricsLoading}
@@ -268,7 +268,7 @@ export function Dashboard({ viewMode, onViewModeChange }: DashboardProps) {
               </div>
 
               {selectedConversationId && (
-                <div className="lg:col-span-1">
+                <div className="xl:col-span-1 min-w-0">
                   <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden sticky top-24">
                     <div className="flex items-center justify-between p-4 border-b border-slate-200 bg-slate-50">
                       <h2 className="text-lg font-semibold text-slate-900">
@@ -284,7 +284,7 @@ export function Dashboard({ viewMode, onViewModeChange }: DashboardProps) {
                         Close Preview
                       </button>
                     </div>
-                    <div className="h-[calc(100vh-200px)] max-h-[800px]">
+                    <div className="h-[calc(100vh-200px)] max-h-[800px] overflow-y-auto">
                       <ConversationViewer conversationId={selectedConversationId} />
                     </div>
                   </div>

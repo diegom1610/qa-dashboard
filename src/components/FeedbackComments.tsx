@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { MessageSquare, Send, AtSign, User } from 'lucide-react';
+import { MessageSquare, Send, AtSign, User, ImagePlus, X } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -38,6 +38,8 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
   const [cursorPosition, setCursorPosition] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [userRole, setUserRole] = useState<string>('agent');
+  const [uploadedImages, setUploadedImages] = useState<File[]>([]);
+  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
 
   useEffect(() => {
     fetchComments();
@@ -176,6 +178,56 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
     return mentions;
   };
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const imageFiles = files.filter(file => file.type.startsWith('image/'));
+
+    if (imageFiles.length > 0) {
+      setUploadedImages(prev => [...prev, ...imageFiles]);
+
+      imageFiles.forEach(file => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setImagePreviewUrls(prev => [...prev, reader.result as string]);
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+  };
+
+  const removeImage = (index: number) => {
+    setUploadedImages(prev => prev.filter((_, i) => i !== index));
+    setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadImages = async (commentId: string): Promise<void> => {
+    if (uploadedImages.length === 0) return;
+
+    for (const file of uploadedImages) {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('feedback_images')
+        .upload(fileName, file);
+
+      if (uploadError) {
+        console.error('Error uploading image:', uploadError);
+        continue;
+      }
+
+      await supabase.from('feedback_images').insert({
+        comment_id: commentId,
+        conversation_id: conversationId,
+        uploaded_by: user.id,
+        storage_path: fileName,
+        file_name: file.name,
+        file_size: file.size,
+        mime_type: file.type,
+      });
+    }
+  };
+
   const handleSubmit = async () => {
     if (!newComment.trim() || !user) return;
 
@@ -195,6 +247,8 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
         .single();
 
       if (commentError) throw commentError;
+
+      await uploadImages(commentData.id);
 
       const mentions = extractMentions(newComment);
 
@@ -234,6 +288,8 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
       }
 
       setNewComment('');
+      setUploadedImages([]);
+      setImagePreviewUrls([]);
       fetchComments();
     } catch (error) {
       console.error('Error submitting comment:', error);
@@ -363,8 +419,44 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
                 ))}
               </div>
             )}
+          </div>
 
-            <div className="flex items-center justify-between mt-2">
+          <div className="mt-2">
+            <label className="flex items-center gap-2 cursor-pointer text-sm text-blue-600 hover:text-blue-700">
+              <ImagePlus className="w-4 h-4" />
+              <span>Add screenshots or images</span>
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+            </label>
+          </div>
+
+          {imagePreviewUrls.length > 0 && (
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {imagePreviewUrls.map((url, index) => (
+                <div key={index} className="relative group">
+                  <img
+                    src={url}
+                    alt={`Upload preview ${index + 1}`}
+                    className="w-full h-20 object-cover rounded-lg border border-slate-300"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(index)}
+                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between mt-2">
               <p className="text-xs text-slate-500">
                 <AtSign className="w-3 h-3 inline mr-1" />
                 Type @ to mention someone
@@ -384,7 +476,6 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
                 )}
               </button>
             </div>
-          </div>
         </>
       )}
     </div>
