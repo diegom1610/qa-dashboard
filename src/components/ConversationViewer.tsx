@@ -156,7 +156,7 @@ export function ConversationViewer({ conversationId }: ConversationViewerProps) 
               ID: {thread.conversation_id}
             </span>
             <a
-              href={`https://app.intercom.com/a/inbox/inbox/conversation/${thread.conversation_id}`}
+              href={`https://app.intercom.com/a/inbox/all/conversation/${thread.conversation_id}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline"

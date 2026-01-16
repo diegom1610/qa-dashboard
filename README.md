@@ -4,12 +4,16 @@ A complete, production-ready dashboard for viewing Intercom QA metrics and colle
 
 ## What This Dashboard Does
 
-- **Displays QA Metrics**: View agent performance data synced from your Google Sheets
-- **Advanced Filtering**: Filter by agent, conversation ID, date range, and resolution status
-- **Performance Analytics**: See summary KPIs like average response time, CSAT scores, and resolution rates
-- **Stakeholder Feedback**: Add qualitative reviews with ratings, categories, and detailed comments
-- **Real-Time Updates**: See changes immediately when other reviewers add feedback
-- **Secure Access**: Role-based authentication with row-level security
+- **Displays QA Metrics**: View agent performance data synced from Intercom
+- **Advanced Multi-Select Filtering**: Filter by multiple workspaces, reviewers, reviewees, groups, and date ranges
+- **Workspace Management**: Organize conversations by workspace (SkyPrivate, CamModelDirectory) with 360 view support
+- **Team Organization**: Assign agents to teams (LATAM, EU) for better performance tracking
+- **Performance Analytics**: See summary KPIs and detailed agent performance metrics
+- **Comprehensive Feedback**: Add reviews with 0-20 star scoring system across 5 categories
+- **Image Attachments**: Upload screenshots and images to feedback and discussion threads
+- **Intercom Integration**: Direct links to view conversations in Intercom
+- **Real-Time Collaboration**: See changes immediately with live updates and comment mentions
+- **Role-Based Access**: Secure authentication with admin, evaluator, and agent roles
 
 ## Quick Start
 
@@ -106,12 +110,15 @@ project/
 - Row-level security prevents unauthorized access
 - Users can only edit/delete their own feedback
 
-### 2. Powerful Filtering
-- **Agent Filter**: Select one or multiple agents
-- **Conversation ID Search**: Find specific conversations
-- **Date Range**: Filter by conversation date
-- **Status Filter**: Filter by resolution status
-- **Clear All**: Reset filters with one click
+### 2. Powerful Multi-Select Filtering
+- **Workspace Filter**: Select multiple workspaces (SkyPrivate, CamModelDirectory, 360 views)
+- **Reviewer Filter**: Select multiple reviewers to see their evaluations
+- **Reviewee Filter**: Select multiple agents to review their performance
+- **Group Filter**: Select multiple teams (LATAM, EU) to analyze team performance
+- **Date Range**: Flexible date range selection with presets
+- **Human Reviewed Only**: Filter to show only manually reviewed conversations
+- **Active Filter Badges**: Visual indication of all active filters with quick removal
+- **Clear All**: Reset all filters with one click
 
 ### 3. Summary Metrics
 Four key performance indicators at a glance:
@@ -126,20 +133,38 @@ Expandable rows reveal:
 - Complete feedback history from all reviewers
 - Form to add new feedback
 
-### 5. Structured Feedback System
+### 5. Advanced Feedback System
 Each review includes:
-- **Rating**: 1-5 star rating
-- **Categories**: 6 predefined categories (tone, accuracy, efficiency, etc.)
-- **Comments**: Detailed text feedback (optional)
-- **Timestamps**: When created and last edited
-- **Edit/Delete**: Users can modify their own feedback
+- **Rating**: 0-20 star scoring system (sum of 5 categories, each 0-4 stars)
+- **Categories**: 5 evaluation categories
+  - Logic Path (0-4 stars)
+  - Information (0-4 stars)
+  - Solution (0-4 stars)
+  - Communication (0-4 stars)
+  - Language Usage (0-4 stars)
+- **Detailed Feedback**: Rich text comments with @mentions
+- **Image Attachments**: Upload screenshots and supporting images
+- **Discussion Threads**: Comment on feedback with mentions and images
+- **Feedback History**: Complete audit trail with edit/delete capabilities
+- **Email Notifications**: Automatic notifications for mentions and new feedback
 
 ### 6. Real-Time Collaboration
 Multiple stakeholders can:
 - View the same data simultaneously
-- See each other's feedback immediately
-- No need to refresh the page
+- See each other's feedback immediately with live updates
+- Mention team members using @username in feedback and comments
+- Upload images to illustrate feedback points
+- View conversation threads directly in Intercom
+- Track conversation preview alongside review forms
 - Changes appear within 1 second
+
+### 7. Admin Controls
+Administrators can:
+- Manage user roles (Agent, Evaluator, Admin)
+- Assign agents to teams (LATAM, EU)
+- View team performance metrics
+- Control access permissions
+- Export data for analysis
 
 ## Technology Stack
 
@@ -163,22 +188,55 @@ Supabase Dashboard → Project Settings → API
 
 ## Database Tables
 
-### agents
-Stores agent information for filtering
-- Automatically populated by sync function
-- Used in filter dropdowns
-
 ### qa_metrics
-Performance data synced from Google Sheets
-- Response times, CSAT scores, resolution status
-- Updated every 15 minutes by sync function
-- Read-only for dashboard users
+Performance data synced from Intercom
+- Conversation details, agent assignments, workspace classification
+- AI scores and human feedback integration
+- 360 queue tracking
+- Updated regularly by sync function
 
 ### human_feedback
-Stakeholder reviews and ratings
-- Created directly through dashboard
-- Users can edit/delete their own feedback
-- All feedback visible to all authenticated users
+Stakeholder reviews with detailed scoring
+- 5 category ratings (0-4 stars each)
+- Detailed feedback text with mentions support
+- Image attachments via storage
+- Full edit/delete audit trail
+
+### feedback_comments
+Discussion threads on feedback
+- Threaded conversations
+- @mention support for collaboration
+- Image attachments
+- Real-time notifications
+
+### feedback_images
+Image storage for feedback and comments
+- Secure file storage in Supabase Storage
+- Linked to feedback or comments
+- Access controlled by RLS policies
+
+### workspaces
+Workspace organization
+- SkyPrivate, CamModelDirectory
+- 360 view queues
+- Workspace-specific filtering
+
+### agent_groups
+Team organization
+- LATAM Team
+- EU Team
+- Custom team management
+
+### agent_group_mapping
+Agent-to-team assignments
+- Many-to-many relationships
+- Performance tracking by team
+
+### user_settings
+User preferences and roles
+- Role-based permissions (agent, evaluator, admin)
+- Timezone preferences
+- Custom settings
 
 ## Common Tasks
 
@@ -191,20 +249,38 @@ Stakeholder reviews and ratings
 5. Check "Auto-confirm user"
 6. Click "Create User"
 
+### Add or Remove Agent Groups
+
+Groups can be managed via Supabase:
+
+1. Go to Supabase Dashboard → Table Editor → agent_groups
+2. Update active status or add new groups
+3. Assign agents to groups in Admin Panel → User Management
+
+Current groups:
+- LATAM Team
+- EU Team
+
+### Assign Agents to Teams
+
+1. Log in as admin
+2. Navigate to Settings → User Management
+3. Click group buttons next to each user
+4. Green checkmark indicates assignment
+
 ### Customize Feedback Categories
 
-Edit `src/components/FeedbackPanel.tsx`:
+Categories are defined in `src/components/FeedbackPanel.tsx`:
 
 ```typescript
-const FEEDBACK_CATEGORIES = [
-  { id: 'tone', label: 'Tone & Empathy' },
-  { id: 'accuracy', label: 'Accuracy' },
-  // Add your categories here
-  { id: 'your_category', label: 'Your Category Name' },
+const RATING_CATEGORIES = [
+  { id: 'logic_path', label: 'Logic Path', description: 'Following structured problem-solving approach', min: 0, max: 4 },
+  { id: 'information', label: 'Information', description: 'Providing accurate and complete information', min: 0, max: 4 },
+  { id: 'solution', label: 'Solution', description: 'Effective problem resolution', min: 0, max: 4 },
+  { id: 'communication', label: 'Communication', description: 'Clear and professional communication', min: 0, max: 4 },
+  { id: 'language_usage', label: 'Language Usage', description: 'Proper grammar and tone', min: 0, max: 4 },
 ];
 ```
-
-Also update `src/components/FeedbackHistory.tsx` with the same categories.
 
 ### Change Sync Frequency
 
@@ -295,23 +371,41 @@ Need help?
 
 ## Version History
 
+### v2.0.0 (2026-01-16)
+- Multi-select filters for workspaces, reviewers, reviewees, and groups
+- Image upload support in feedback and comments
+- Intercom conversation direct links
+- Team management (LATAM, EU teams)
+- Enhanced 0-20 star rating system with 5 categories
+- Admin panel for group assignments
+- Comment mentions with email notifications
+- Workspace filtering improvements
+- Responsive layout enhancements
+
 ### v1.0.0 (2025-10-20)
 - Initial release
 - Core dashboard functionality
 - Authentication system
-- Google Sheets sync
+- Intercom data sync
 - Feedback system
 - Real-time updates
 
 ## Roadmap
 
+### Completed
+- ✅ Multi-select filtering
+- ✅ Image attachments
+- ✅ Team management
+- ✅ Email notifications for mentions
+- ✅ Enhanced rating system
+
 ### Planned Features
 - CSV export from dashboard
-- Advanced search and filtering
-- Email notifications
-- Analytics dashboard with charts
+- Advanced analytics dashboard with charts
+- Performance trend graphs
 - Mobile app
 - AI-powered insights
+- Automated quality scoring
 
 ## Acknowledgments
 
@@ -324,5 +418,5 @@ Built with:
 
 ---
 
-**Last Updated**: October 20, 2025
+**Last Updated**: January 16, 2026
 **Maintained By**: Your Development Team

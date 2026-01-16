@@ -7,6 +7,7 @@ import { AgentPerformanceStats } from './AgentPerformanceStats';
 import { AgentPerformanceTable } from './AgentPerformanceTable';
 import { AgentConversationsTable } from './AgentConversationsTable';
 import { Sidebar } from './Sidebar';
+import { MultiSelect } from './MultiSelect';
 
 type DateRangeType = 'today' | 'yesterday' | 'this_week' | 'last_week' | 'this_month' | 'last_month' | 'this_year' | 'last_year' | 'last_7_days' | 'last_30_days' | 'last_90_days' | 'custom' | 'all';
 
@@ -26,10 +27,10 @@ export function AgentDashboard({ viewMode, onViewModeChange }: AgentDashboardPro
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [selectedWorkspace, setSelectedWorkspace] = useState<string>('all');
-  const [selectedReviewer, setSelectedReviewer] = useState<string>('all');
-  const [selectedReviewee, setSelectedReviewee] = useState<string>('all');
-  const [selectedGroup, setSelectedGroup] = useState<string>('all');
+  const [selectedWorkspaces, setSelectedWorkspaces] = useState<string[]>([]);
+  const [selectedReviewers, setSelectedReviewers] = useState<string[]>([]);
+  const [selectedReviewees, setSelectedReviewees] = useState<string[]>([]);
+  const [selectedGroups, setSelectedGroups] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState<DateRangeType>('last_30_days');
   const [customStartDate, setCustomStartDate] = useState<string>('');
   const [customEndDate, setCustomEndDate] = useState<string>('');
@@ -45,7 +46,7 @@ export function AgentDashboard({ viewMode, onViewModeChange }: AgentDashboardPro
 
   useEffect(() => {
     applyFilters();
-  }, [metrics, allFeedback, selectedWorkspace, selectedReviewer, selectedReviewee, selectedGroup, dateRange, customStartDate, customEndDate, showHumanReviewedOnly]);
+  }, [metrics, allFeedback, selectedWorkspaces, selectedReviewers, selectedReviewees, selectedGroups, dateRange, customStartDate, customEndDate, showHumanReviewedOnly]);
 
   const getDateRange = (): { startDate: Date | null; endDate: Date | null } => {
     const now = new Date();
@@ -349,37 +350,39 @@ const applyFilters = async () => {
   }
 
   // Apply workspace filter (including 360 views)
-  if (selectedWorkspace !== 'all') {
+  if (selectedWorkspaces.length > 0) {
     const beforeCount = filtered.length;
-
-    if (selectedWorkspace === '360_SkyPrivate') {
-      filtered = filtered.filter(m => m.workspace === 'SkyPrivate' && m.is_360_queue === true);
-    } else if (selectedWorkspace === '360_CamModelDirectory') {
-      filtered = filtered.filter(m => m.workspace === 'CamModelDirectory' && m.is_360_queue === true);
-    } else {
-      filtered = filtered.filter(m => m.workspace === selectedWorkspace && m.is_360_queue !== true);
-    }
-
-    console.log(`Workspace filter (${selectedWorkspace}): ${beforeCount} -> ${filtered.length}`);
+    filtered = filtered.filter(m => {
+      return selectedWorkspaces.some(workspace => {
+        if (workspace === '360_SkyPrivate') {
+          return m.workspace === 'SkyPrivate' && m.is_360_queue === true;
+        } else if (workspace === '360_CamModelDirectory') {
+          return m.workspace === 'CamModelDirectory' && m.is_360_queue === true;
+        } else {
+          return m.workspace === workspace && m.is_360_queue !== true;
+        }
+      });
+    });
+    console.log(`Workspace filter (${selectedWorkspaces.join(', ')}): ${beforeCount} -> ${filtered.length}`);
   }
 
   // Apply reviewee (agent) filter
-  if (selectedReviewee !== 'all') {
+  if (selectedReviewees.length > 0) {
     const beforeCount = filtered.length;
-    filtered = filtered.filter(m => m.agent_name === selectedReviewee);
+    filtered = filtered.filter(m => selectedReviewees.includes(m.agent_name));
     console.log(`Reviewee filter: ${beforeCount} -> ${filtered.length}`);
   }
 
   // Apply group filter
-  if (selectedGroup !== 'all') {
+  if (selectedGroups.length > 0) {
     try {
       const { data: groupMappings } = await supabase
         .from('agent_group_mapping')
-        .select('agent_id')
-        .eq('group_id', selectedGroup);
+        .select('agent_id, group_id')
+        .in('group_id', selectedGroups);
 
       if (groupMappings && groupMappings.length > 0) {
-        const agentIds = groupMappings.map(m => m.agent_id);
+        const agentIds = [...new Set(groupMappings.map(m => m.agent_id))];
         const beforeCount = filtered.length;
         filtered = filtered.filter(m => agentIds.includes(m.agent_id));
         console.log(`Group filter: ${beforeCount} -> ${filtered.length}`);
@@ -393,9 +396,9 @@ const applyFilters = async () => {
   }
 
   // Apply reviewer filter
-  if (selectedReviewer !== 'all') {
+  if (selectedReviewers.length > 0) {
     const reviewedConversations = allFeedback
-      .filter(f => f.reviewer_id === selectedReviewer)
+      .filter(f => selectedReviewers.includes(f.reviewer_id))
       .map(f => f.conversation_id);
     const beforeCount = filtered.length;
     filtered = filtered.filter(m => reviewedConversations.includes(m.conversation_id));
@@ -428,10 +431,10 @@ const applyFilters = async () => {
   ).sort();
 
   const resetFilters = () => {
-    setSelectedWorkspace('all');
-    setSelectedReviewer('all');
-    setSelectedReviewee('all');
-    setSelectedGroup('all');
+    setSelectedWorkspaces([]);
+    setSelectedReviewers([]);
+    setSelectedReviewees([]);
+    setSelectedGroups([]);
     setDateRange('last_30_days');
     setCustomStartDate('');
     setCustomEndDate('');
@@ -590,63 +593,45 @@ const applyFilters = async () => {
               <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
 
-            <select
-              value={selectedWorkspace}
-              onChange={(e) => setSelectedWorkspace(e.target.value)}
-              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">All Workspaces</option>
-              <optgroup label="Workspaces">
-                {workspaces.map((workspace) => (
-                  <option key={workspace.id} value={workspace.name}>
-                    {workspace.display_name}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="360 Views">
-                <option value="360_SkyPrivate">360 view - SkyPrivate</option>
-                <option value="360_CamModelDirectory">360 view - CamModelDirectory</option>
-              </optgroup>
-            </select>
+            <MultiSelect
+              options={[
+                {
+                  label: 'Workspaces',
+                  options: workspaces.map(w => ({ value: w.name, label: w.display_name }))
+                },
+                {
+                  label: '360 Views',
+                  options: [
+                    { value: '360_SkyPrivate', label: '360 view - SkyPrivate' },
+                    { value: '360_CamModelDirectory', label: '360 view - CamModelDirectory' }
+                  ]
+                }
+              ]}
+              selectedValues={selectedWorkspaces}
+              onChange={setSelectedWorkspaces}
+              placeholder="All Workspaces"
+            />
 
-            <select
-              value={selectedReviewer}
-              onChange={(e) => setSelectedReviewer(e.target.value)}
-              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">All Reviewers</option>
-              {uniqueReviewers.map((reviewer) => (
-                <option key={reviewer.id} value={reviewer.id}>
-                  {reviewer.name}
-                </option>
-              ))}
-            </select>
+            <MultiSelect
+              options={uniqueReviewers.map(r => ({ value: r.id, label: r.name }))}
+              selectedValues={selectedReviewers}
+              onChange={setSelectedReviewers}
+              placeholder="All Reviewers"
+            />
 
-            <select
-              value={selectedReviewee}
-              onChange={(e) => setSelectedReviewee(e.target.value)}
-              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">All Reviewees</option>
-              {uniqueAgents.map((agent) => (
-                <option key={agent} value={agent}>
-                  {agent}
-                </option>
-              ))}
-            </select>
+            <MultiSelect
+              options={uniqueAgents.map(a => ({ value: a, label: a }))}
+              selectedValues={selectedReviewees}
+              onChange={setSelectedReviewees}
+              placeholder="All Reviewees"
+            />
 
-            <select
-              value={selectedGroup}
-              onChange={(e) => setSelectedGroup(e.target.value)}
-              className="px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">All Groups</option>
-              {groups.map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.display_name}
-                </option>
-              ))}
-            </select>
+            <MultiSelect
+              options={groups.map(g => ({ value: g.id, label: g.display_name }))}
+              selectedValues={selectedGroups}
+              onChange={setSelectedGroups}
+              placeholder="All Groups"
+            />
 
             <div className="flex items-center space-x-2 px-3 py-2 bg-white rounded-lg border border-slate-300">
               <input
@@ -726,42 +711,42 @@ const applyFilters = async () => {
                 </button>
               </div>
             )}
-            {selectedWorkspace !== 'all' && (
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+            {selectedWorkspaces.map(workspace => (
+              <div key={workspace} className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
                 <span>Workspace: {
-                  selectedWorkspace === '360_SkyPrivate' ? '360 view - SkyPrivate' :
-                  selectedWorkspace === '360_CamModelDirectory' ? '360 view - CamModelDirectory' :
-                  workspaces.find(w => w.name === selectedWorkspace)?.display_name || selectedWorkspace
+                  workspace === '360_SkyPrivate' ? '360 view - SkyPrivate' :
+                  workspace === '360_CamModelDirectory' ? '360 view - CamModelDirectory' :
+                  workspaces.find(w => w.name === workspace)?.display_name || workspace
                 }</span>
-                <button onClick={() => setSelectedWorkspace('all')} className="hover:text-blue-900">
+                <button onClick={() => setSelectedWorkspaces(selectedWorkspaces.filter(w => w !== workspace))} className="hover:text-blue-900">
                   <X className="w-3 h-3" />
                 </button>
               </div>
-            )}
-            {selectedReviewer !== 'all' && (
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                <span>Reviewer: {uniqueReviewers.find(r => r.id === selectedReviewer)?.name}</span>
-                <button onClick={() => setSelectedReviewer('all')} className="hover:text-blue-900">
+            ))}
+            {selectedReviewers.map(reviewer => (
+              <div key={reviewer} className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                <span>Reviewer: {uniqueReviewers.find(r => r.id === reviewer)?.name}</span>
+                <button onClick={() => setSelectedReviewers(selectedReviewers.filter(r => r !== reviewer))} className="hover:text-blue-900">
                   <X className="w-3 h-3" />
                 </button>
               </div>
-            )}
-            {selectedReviewee !== 'all' && (
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                <span>Reviewee: {selectedReviewee}</span>
-                <button onClick={() => setSelectedReviewee('all')} className="hover:text-blue-900">
+            ))}
+            {selectedReviewees.map(reviewee => (
+              <div key={reviewee} className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                <span>Reviewee: {reviewee}</span>
+                <button onClick={() => setSelectedReviewees(selectedReviewees.filter(r => r !== reviewee))} className="hover:text-blue-900">
                   <X className="w-3 h-3" />
                 </button>
               </div>
-            )}
-            {selectedGroup !== 'all' && (
-              <div className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                <span>Group: {groups.find(g => g.id === selectedGroup)?.display_name}</span>
-                <button onClick={() => setSelectedGroup('all')} className="hover:text-blue-900">
+            ))}
+            {selectedGroups.map(group => (
+              <div key={group} className="inline-flex items-center gap-2 px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
+                <span>Group: {groups.find(g => g.id === group)?.display_name}</span>
+                <button onClick={() => setSelectedGroups(selectedGroups.filter(g => g !== group))} className="hover:text-blue-900">
                   <X className="w-3 h-3" />
                 </button>
               </div>
-            )}
+            ))}
           </div>
 
           {filteredMetrics.length === 0 && !loading && (

@@ -10,32 +10,60 @@ interface User {
   timezone: string | null;
 }
 
+interface Group {
+  id: string;
+  name: string;
+  display_name: string;
+}
+
+interface UserGroupMapping {
+  [userId: string]: string[];
+}
+
 export function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [userGroupMappings, setUserGroupMappings] = useState<UserGroupMapping>({});
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const { user: currentUser } = useAuth();
 
   useEffect(() => {
-    fetchUsers();
+    fetchData();
   }, []);
 
-  const fetchUsers = async () => {
+  const fetchData = async () => {
     try {
       setLoading(true);
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('id, email, role, timezone')
-        .order('email', { ascending: true });
 
-      if (error) throw error;
-      setUsers(data || []);
+      const [usersResult, groupsResult, mappingsResult] = await Promise.all([
+        supabase.from('user_roles').select('id, email, role, timezone').order('email', { ascending: true }),
+        supabase.from('agent_groups').select('id, name, display_name').eq('active', true).order('display_name'),
+        supabase.from('agent_group_mapping').select('agent_id, group_id')
+      ]);
+
+      if (usersResult.error) throw usersResult.error;
+      if (groupsResult.error) throw groupsResult.error;
+      if (mappingsResult.error) throw mappingsResult.error;
+
+      setUsers(usersResult.data || []);
+      setGroups(groupsResult.data || []);
+
+      const mappings: UserGroupMapping = {};
+      (mappingsResult.data || []).forEach(mapping => {
+        if (!mappings[mapping.agent_id]) {
+          mappings[mapping.agent_id] = [];
+        }
+        mappings[mapping.agent_id].push(mapping.group_id);
+      });
+      setUserGroupMappings(mappings);
+
     } catch (error) {
-      console.error('Error fetching users:', error);
+      console.error('Error fetching data:', error);
       setMessage({
         type: 'error',
-        text: 'Failed to load users',
+        text: 'Failed to load data',
       });
     } finally {
       setLoading(false);
@@ -93,7 +121,51 @@ export function UserManagement() {
         text: error instanceof Error ? error.message : 'Failed to update role',
       });
       setTimeout(() => setMessage(null), 5000);
-      await fetchUsers();
+      await fetchData();
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const handleGroupChange = async (userId: string, groupId: string, isAssigned: boolean) => {
+    setUpdating(userId);
+    setMessage(null);
+
+    try {
+      if (isAssigned) {
+        const { error } = await supabase.from('agent_group_mapping').delete().eq('agent_id', userId).eq('group_id', groupId);
+        if (error) throw error;
+
+        setUserGroupMappings(prev => ({
+          ...prev,
+          [userId]: (prev[userId] || []).filter(g => g !== groupId)
+        }));
+      } else {
+        const { error } = await supabase.from('agent_group_mapping').insert({ agent_id: userId, group_id: groupId });
+        if (error) throw error;
+
+        setUserGroupMappings(prev => ({
+          ...prev,
+          [userId]: [...(prev[userId] || []), groupId]
+        }));
+      }
+
+      const userEmail = users.find(u => u.id === userId)?.email;
+      const groupName = groups.find(g => g.id === groupId)?.display_name;
+      setMessage({
+        type: 'success',
+        text: `${userEmail} ${isAssigned ? 'removed from' : 'added to'} ${groupName}`,
+      });
+
+      setTimeout(() => setMessage(null), 5000);
+    } catch (error) {
+      console.error('Error updating group assignment:', error);
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'Failed to update group assignment',
+      });
+      setTimeout(() => setMessage(null), 5000);
+      await fetchData();
     } finally {
       setUpdating(null);
     }
@@ -131,7 +203,7 @@ export function UserManagement() {
           </div>
         </div>
         <button
-          onClick={fetchUsers}
+          onClick={fetchData}
           disabled={loading}
           className="px-2.5 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -187,6 +259,9 @@ export function UserManagement() {
               <th className="text-left py-3 px-4 text-sm font-semibold text-slate-900">
                 Timezone
               </th>
+              <th className="text-left py-3 px-4 text-sm font-semibold text-slate-900">
+                Group Assignment
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -240,6 +315,27 @@ export function UserManagement() {
                   <span className="text-sm text-slate-600">
                     {user.timezone || 'UTC'}
                   </span>
+                </td>
+                <td className="py-3 px-4">
+                  <div className="flex flex-wrap gap-2">
+                    {groups.map(group => {
+                      const isAssigned = (userGroupMappings[user.id] || []).includes(group.id);
+                      return (
+                        <button
+                          key={group.id}
+                          onClick={() => handleGroupChange(user.id, group.id, isAssigned)}
+                          disabled={updating === user.id}
+                          className={`px-2.5 py-1 text-xs font-medium rounded transition disabled:opacity-50 disabled:cursor-not-allowed ${
+                            isAssigned
+                              ? 'bg-green-100 text-green-700 border border-green-300 hover:bg-green-200'
+                              : 'bg-slate-100 text-slate-600 border border-slate-300 hover:bg-slate-200'
+                          }`}
+                        >
+                          {group.display_name} {isAssigned ? '✓' : '+'}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </td>
               </tr>
             ))}
