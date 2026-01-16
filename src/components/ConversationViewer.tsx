@@ -31,6 +31,9 @@ interface ConversationViewerProps {
   conversationId: string | null;
 }
 
+// INTERCOM APP ID - Update this if your app ID is different
+const INTERCOM_APP_ID = 'b37vb7kt';
+
 export function ConversationViewer({ conversationId }: ConversationViewerProps) {
   const [thread, setThread] = useState<ConversationThread | null>(null);
   const [loading, setLoading] = useState(false);
@@ -147,6 +150,9 @@ export function ConversationViewer({ conversationId }: ConversationViewerProps) 
     }
   };
 
+  // FIXED: Correct Intercom URL format
+  const intercomUrl = `https://app.intercom.com/a/apps/${INTERCOM_APP_ID}/inbox/inbox/conversation/${thread.conversation_id}`;
+
   return (
     <div className="flex flex-col h-full bg-white">
       <div className="border-b border-slate-200 p-4 bg-slate-50">
@@ -156,7 +162,7 @@ export function ConversationViewer({ conversationId }: ConversationViewerProps) 
               ID: {thread.conversation_id}
             </span>
             <a
-              href={`https://app.intercom.com/a/inbox/all/conversation/${thread.conversation_id}`}
+              href={intercomUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 hover:underline"
