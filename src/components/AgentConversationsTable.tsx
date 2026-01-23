@@ -181,7 +181,7 @@ export function AgentConversationsTable({ metrics, feedback }: AgentConversation
                 >
                   <td className="px-6 py-4">
                     <span className="font-mono text-xs text-slate-600">
-                      {metric.conversation_id.substring(0, 12)}...
+                      {metric.conversation_id}...
                     </span>
                   </td>
                   <td className="px-6 py-4">

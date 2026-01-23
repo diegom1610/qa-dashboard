@@ -1,5 +1,5 @@
 import { useState, FormEvent, useEffect, useRef } from 'react';
-import { Star, CheckCircle, AlertCircle, Send, Lock, Shield, AtSign, ImagePlus, X } from 'lucide-react';
+import { Star, CheckCircle, AlertCircle, Send, Lock, Shield, AtSign } from 'lucide-react';
 import { useFeedback } from '../hooks/useFeedback';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -52,8 +52,6 @@ export function FeedbackPanel({
   const [userSuggestions, setUserSuggestions] = useState<UserSuggestion[]>([]);
   const [cursorPosition, setCursorPosition] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [uploadedImages, setUploadedImages] = useState<File[]>([]);
-  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
 
   const { submitFeedback, feedback } = useFeedback(conversationId);
   const { user } = useAuth();
@@ -159,56 +157,6 @@ export function FeedbackPanel({
     return mentions;
   };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    const imageFiles = files.filter(file => file.type.startsWith('image/'));
-
-    if (imageFiles.length > 0) {
-      setUploadedImages(prev => [...prev, ...imageFiles]);
-
-      imageFiles.forEach(file => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setImagePreviewUrls(prev => [...prev, reader.result as string]);
-        };
-        reader.readAsDataURL(file);
-      });
-    }
-  };
-
-  const removeImage = (index: number) => {
-    setUploadedImages(prev => prev.filter((_, i) => i !== index));
-    setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
-  };
-
-  const uploadImages = async (feedbackId: string): Promise<void> => {
-    if (uploadedImages.length === 0) return;
-
-    for (const file of uploadedImages) {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from('feedback_images')
-        .upload(fileName, file);
-
-      if (uploadError) {
-        console.error('Error uploading image:', uploadError);
-        continue;
-      }
-
-      await supabase.from('feedback_images').insert({
-        feedback_id: feedbackId,
-        conversation_id: conversationId,
-        uploaded_by: user.id,
-        storage_path: fileName,
-        file_name: file.name,
-        file_size: file.size,
-        mime_type: file.type,
-      });
-    }
-  };
-
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
       case 'evaluator':
@@ -250,29 +198,28 @@ export function FeedbackPanel({
     setSubmitStatus('idle');
     setErrorMessage('');
 
-    if (totalStars === 0) {
-      setSubmitStatus('error');
-      setErrorMessage('Please rate at least one category above 0');
-      return;
-    }
-
+    // Check if at least one category has been rated (even if it's 0)
+    // We consider a category "unrated" only if it hasn't been clicked at all
+    // For now, we'll require total > 0 OR user must confirm they want to rate everything as 0
+    // Since we can't track "clicked state", we'll allow totalStars >= 0
+    // This means all zeros is valid
+    
     setIsSubmitting(true);
 
     try {
-      const ratedCategories = Object.keys(categoryScores).filter(
-        (key) => categoryScores[key as keyof typeof categoryScores] > 0
-      );
+      // Include categories rated as 0 in the submission
+      const ratedCategories = Object.keys(categoryScores);
 
       const feedbackData = await submitFeedback({
         conversation_id: conversationId,
         rating: totalStars,
         feedback_text: feedbackText.trim() || null,
         categories: ratedCategories,
-        logic_path: categoryScores.logic_path > 0,
-        information: categoryScores.information > 0,
-        solution: categoryScores.solution > 0,
-        communication: categoryScores.communication > 0,
-        language_usage: categoryScores.language_usage > 0,
+        logic_path: true,  // Always include all categories
+        information: true,
+        solution: true,
+        communication: true,
+        language_usage: true,
         logic_path_score: categoryScores.logic_path,
         information_score: categoryScores.information,
         solution_score: categoryScores.solution,
@@ -296,8 +243,6 @@ export function FeedbackPanel({
           console.error('Failed to send feedback notification:', notifError);
         }
       }
-
-      await uploadImages(feedbackData.id);
 
       const mentions = extractMentions(feedbackText);
 
@@ -362,8 +307,6 @@ export function FeedbackPanel({
         language_usage: 0,
       });
       setFeedbackText('');
-      setUploadedImages([]);
-      setImagePreviewUrls([]);
 
       if (onFeedbackSubmitted) {
         onFeedbackSubmitted();
@@ -568,41 +511,6 @@ export function FeedbackPanel({
               {feedbackText.length} / 1000 characters
             </p>
           </div>
-
-          <div className="mt-3">
-            <label className="flex items-center gap-2 cursor-pointer text-sm text-blue-600 hover:text-blue-700">
-              <ImagePlus className="w-4 h-4" />
-              <span>Add screenshots or images</span>
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={handleImageSelect}
-                className="hidden"
-              />
-            </label>
-          </div>
-
-          {imagePreviewUrls.length > 0 && (
-            <div className="mt-3 grid grid-cols-3 gap-2">
-              {imagePreviewUrls.map((url, index) => (
-                <div key={index} className="relative group">
-                  <img
-                    src={url}
-                    alt={`Upload preview ${index + 1}`}
-                    className="w-full h-24 object-cover rounded-lg border border-slate-300"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => removeImage(index)}
-                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
 
         {submitStatus === 'success' && (
