@@ -710,12 +710,13 @@ def sync_conversations(start_unix: int, end_unix: int, enrich: bool = True) -> i
                 tags, workspace, is_360, queue_type = enrich_conversation_with_tags(conv["conversation_id"])
                 
                 if tags or workspace != 'Unknown':
-                    # Don't store tags in the record (causes JSONB/array issues)
+                    # Store tags as JSON array (Supabase handles this correctly)
+                    conv["conversation_tags"] = tags 
                     conv["workspace"] = workspace
                     conv["is_360_queue"] = is_360
                     conv["queue_type_360"] = queue_type
                     enriched_count += 1
-                    logger.debug(f"✓ {conv['conversation_id']}: {workspace} | 360={is_360} ({queue_type})")
+                    logger.debug(f"✓ {conv['conversation_id']}: {workspace} | 360={is_360} ({queue_type}) | Tags: {tags}")
                 else:
                     failed_count += 1
             

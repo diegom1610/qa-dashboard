@@ -339,7 +339,6 @@ const applyFilters = async () => {
       if (!m.metric_date) return false;
       
       // Extract just YYYY-MM-DD from metric_date (handles both formats)
-      // "2025-12-14" or "2025-12-14T00:00:00+00:00" -> "2025-12-14"
       const metricDateStr = m.metric_date.substring(0, 10);
       
       const inRange = metricDateStr >= startStr && metricDateStr <= endStr;
@@ -349,40 +348,34 @@ const applyFilters = async () => {
     console.log(`Date filter: ${beforeCount} -> ${filtered.length}`);
   }
 
-  // Apply workspace filter (including 360 views)
-  if (selectedWorkspaces.length > 0) {
+  // Apply workspace filter - FIXED VERSION
+  if (selectedWorkspace !== 'all') {
     const beforeCount = filtered.length;
-    filtered = filtered.filter(m => {
-      return selectedWorkspaces.some(workspace => {
-        if (workspace === '360_SkyPrivate') {
-          return m.workspace === 'SkyPrivate' && m.is_360_queue === true;
-        } else if (workspace === '360_CamModelDirectory') {
-          return m.workspace === 'CamModelDirectory' && m.is_360_queue === true;
-        } else {
-          return m.workspace === workspace && m.is_360_queue !== true;
-        }
-      });
-    });
-    console.log(`Workspace filter (${selectedWorkspaces.join(', ')}): ${beforeCount} -> ${filtered.length}`);
+    
+    // Simply filter by workspace name directly
+    // The database stores '360_SkyPrivate', 'SkyPrivate', etc.
+    filtered = filtered.filter(m => m.workspace === selectedWorkspace);
+
+    console.log(`Workspace filter (${selectedWorkspace}): ${beforeCount} -> ${filtered.length}`);
   }
 
   // Apply reviewee (agent) filter
-  if (selectedReviewees.length > 0) {
+  if (selectedReviewee !== 'all') {
     const beforeCount = filtered.length;
-    filtered = filtered.filter(m => selectedReviewees.includes(m.agent_name));
+    filtered = filtered.filter(m => m.agent_name === selectedReviewee);
     console.log(`Reviewee filter: ${beforeCount} -> ${filtered.length}`);
   }
 
   // Apply group filter
-  if (selectedGroups.length > 0) {
+  if (selectedGroup !== 'all') {
     try {
       const { data: groupMappings } = await supabase
         .from('agent_group_mapping')
-        .select('agent_id, group_id')
-        .in('group_id', selectedGroups);
+        .select('agent_id')
+        .eq('group_id', selectedGroup);
 
       if (groupMappings && groupMappings.length > 0) {
-        const agentIds = [...new Set(groupMappings.map(m => m.agent_id))];
+        const agentIds = groupMappings.map(m => m.agent_id);
         const beforeCount = filtered.length;
         filtered = filtered.filter(m => agentIds.includes(m.agent_id));
         console.log(`Group filter: ${beforeCount} -> ${filtered.length}`);
@@ -396,9 +389,9 @@ const applyFilters = async () => {
   }
 
   // Apply reviewer filter
-  if (selectedReviewers.length > 0) {
+  if (selectedReviewer !== 'all') {
     const reviewedConversations = allFeedback
-      .filter(f => selectedReviewers.includes(f.reviewer_id))
+      .filter(f => f.reviewer_id === selectedReviewer)
       .map(f => f.conversation_id);
     const beforeCount = filtered.length;
     filtered = filtered.filter(m => reviewedConversations.includes(m.conversation_id));
