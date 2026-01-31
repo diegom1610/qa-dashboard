@@ -312,15 +312,17 @@ const fetchData = async () => {
 const applyFilters = async () => {
   let filtered = [...metrics];
 
-  // DEBUG - Remove after confirming fix works
+  // DEBUG
   console.log('=== FILTER DEBUG ===');
   console.log('Total metrics:', metrics.length);
-  console.log('Sample metric_date:', metrics[0]?.metric_date);
+  console.log('Selected workspaces:', selectedWorkspaces);
+  console.log('Selected reviewers:', selectedReviewers);
+  console.log('Selected reviewees:', selectedReviewees);
+  console.log('Selected groups:', selectedGroups);
 
   // Apply date range filter - TIMEZONE SAFE
   const { startDate, endDate } = getDateRange();
   if (startDate && endDate) {
-    // Extract YYYY-MM-DD using LOCAL date components (not UTC conversion)
     const startYear = startDate.getFullYear();
     const startMonth = String(startDate.getMonth() + 1).padStart(2, '0');
     const startDay = String(startDate.getDate()).padStart(2, '0');
@@ -337,65 +339,62 @@ const applyFilters = async () => {
     
     filtered = filtered.filter(m => {
       if (!m.metric_date) return false;
-      
-      // Extract just YYYY-MM-DD from metric_date (handles both formats)
       const metricDateStr = m.metric_date.substring(0, 10);
-      
-      const inRange = metricDateStr >= startStr && metricDateStr <= endStr;
-      return inRange;
+      return metricDateStr >= startStr && metricDateStr <= endStr;
     });
 
     console.log(`Date filter: ${beforeCount} -> ${filtered.length}`);
   }
 
-  // Apply workspace filter - FIXED VERSION
-  if (selectedWorkspace !== 'all') {
+  // Apply workspace filter - FIXED FOR MULTI-SELECT
+  if (selectedWorkspaces.length > 0) {
     const beforeCount = filtered.length;
     
-    // Simply filter by workspace name directly
-    // The database stores '360_SkyPrivate', 'SkyPrivate', etc.
-    filtered = filtered.filter(m => m.workspace === selectedWorkspace);
+    // Filter by any of the selected workspaces
+    filtered = filtered.filter(m => selectedWorkspaces.includes(m.workspace));
 
-    console.log(`Workspace filter (${selectedWorkspace}): ${beforeCount} -> ${filtered.length}`);
+    console.log(`Workspace filter (${selectedWorkspaces.join(', ')}): ${beforeCount} -> ${filtered.length}`);
   }
 
-  // Apply reviewee (agent) filter
-  if (selectedReviewee !== 'all') {
+  // Apply reviewer filter - MULTI-SELECT
+  if (selectedReviewers.length > 0) {
+    const reviewedConversations = allFeedback
+      .filter(f => selectedReviewers.includes(f.reviewer_id))
+      .map(f => f.conversation_id);
+    
     const beforeCount = filtered.length;
-    filtered = filtered.filter(m => m.agent_name === selectedReviewee);
+    filtered = filtered.filter(m => reviewedConversations.includes(m.conversation_id));
+    console.log(`Reviewer filter: ${beforeCount} -> ${filtered.length}`);
+  }
+
+  // Apply reviewee (agent) filter - MULTI-SELECT
+  if (selectedReviewees.length > 0) {
+    const beforeCount = filtered.length;
+    filtered = filtered.filter(m => selectedReviewees.includes(m.agent_name));
     console.log(`Reviewee filter: ${beforeCount} -> ${filtered.length}`);
   }
 
-  // Apply group filter
-  if (selectedGroup !== 'all') {
+  // Apply group filter - MULTI-SELECT
+  if (selectedGroups.length > 0) {
     try {
+      // Get all agent_ids for selected groups
       const { data: groupMappings } = await supabase
         .from('agent_group_mapping')
         .select('agent_id')
-        .eq('group_id', selectedGroup);
+        .in('group_id', selectedGroups);
 
       if (groupMappings && groupMappings.length > 0) {
-        const agentIds = groupMappings.map(m => m.agent_id);
+        const agentIds = [...new Set(groupMappings.map(m => m.agent_id))];
         const beforeCount = filtered.length;
         filtered = filtered.filter(m => agentIds.includes(m.agent_id));
         console.log(`Group filter: ${beforeCount} -> ${filtered.length}`);
       } else {
-        console.log('No group mappings found');
+        console.log('No group mappings found for selected groups');
         filtered = [];
       }
     } catch (err) {
       console.error('Error fetching group mappings:', err);
     }
-  }
-
-  // Apply reviewer filter
-  if (selectedReviewer !== 'all') {
-    const reviewedConversations = allFeedback
-      .filter(f => f.reviewer_id === selectedReviewer)
-      .map(f => f.conversation_id);
-    const beforeCount = filtered.length;
-    filtered = filtered.filter(m => reviewedConversations.includes(m.conversation_id));
-    console.log(`Reviewer filter: ${beforeCount} -> ${filtered.length}`);
   }
 
   // Filter by human review status
@@ -404,13 +403,13 @@ const applyFilters = async () => {
     const beforeCount = filtered.length;
     filtered = filtered.filter(m => conversationsWithHumanFeedback.has(m.conversation_id));
     console.log(`Human reviewed filter: ${beforeCount} -> ${filtered.length}`);
-    console.log('Total human feedback records:', allFeedback.length);
   }
 
   console.log('=== FINAL COUNT:', filtered.length, '===');
   
   setFilteredMetrics(filtered);
 };
+
 
   const uniqueReviewers = Array.from(
     new Set(allFeedback.map(f => f.reviewer_id))
