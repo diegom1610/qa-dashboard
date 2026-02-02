@@ -172,19 +172,30 @@ CEQ_360_PATTERNS = [
 ]
 
 
-def determine_workspace(tags: List[str]) -> str:
-    """Determine workspace from tags using CONTAINS logic"""
+def determine_workspace(tags: List[str], is_360_queue: bool = False) -> str:
+    """
+    Determine workspace from tags using CONTAINS logic.
+    If is_360_queue=True, adds '360_' prefix to the workspace name.
+    """
     if not tags:
-        return 'Unknown'
+        base_workspace = 'Unknown'
+    else:
+        all_tags_lower = ' '.join(t.lower() for t in tags)
+        
+        base_workspace = 'Unknown'
+        for workspace, keywords in WORKSPACE_KEYWORDS.items():
+            for keyword in keywords:
+                if keyword.lower() in all_tags_lower:
+                    base_workspace = workspace
+                    break
+            if base_workspace != 'Unknown':
+                break
     
-    all_tags_lower = ' '.join(t.lower() for t in tags)
+    # Add 360 prefix if applicable
+    if is_360_queue and base_workspace != 'Unknown':
+        return f'360_{base_workspace}'
     
-    for workspace, keywords in WORKSPACE_KEYWORDS.items():
-        for keyword in keywords:
-            if keyword.lower() in all_tags_lower:
-                return workspace
-    
-    return 'Unknown'
+    return base_workspace
 
 
 def determine_360_queue(tags: List[str]) -> Tuple[bool, Optional[str]]:
@@ -535,9 +546,11 @@ def enrich_conversation_with_tags(conversation_id: str) -> Tuple[List[str], str,
         if data.get("tags") and data["tags"].get("tags"):
             tags = [t.get("name", "") for t in data["tags"]["tags"] if t.get("name")]
         
-        # Determine workspace and 360 queue
-        workspace = determine_workspace(tags)
+        # Determine 360 queue first
         is_360, queue_type = determine_360_queue(tags)
+        
+        # Then determine workspace (with 360 prefix if applicable)
+        workspace = determine_workspace(tags, is_360_queue=is_360)
         
         return tags, workspace, is_360, queue_type
         
@@ -620,10 +633,11 @@ def parse_conversation_row(row: Dict, admins_map: Dict[str, str]) -> Dict:
         "response_time_seconds": None,
         "customer_satisfaction_score": None,
         "rating_source": "ai" if ai_score else "none",
-        # These will be populated by enrichment
+        # These will be populated by enrichment (initialize with defaults)
         "workspace": "Unknown",
         "is_360_queue": False,
-        "queue_type_360": None
+        "queue_type_360": None,
+        "conversation_tags": []
     }
 
 # -----------------------------
@@ -709,15 +723,21 @@ def sync_conversations(start_unix: int, end_unix: int, enrich: bool = True) -> i
             for conv in batch:
                 tags, workspace, is_360, queue_type = enrich_conversation_with_tags(conv["conversation_id"])
                 
+                # ALWAYS set these fields, even if enrichment fails
+                # This ensures all conversations have identical key structure
                 if tags or workspace != 'Unknown':
-                    # Store tags as JSON array (Supabase handles this correctly)
-                    conv["conversation_tags"] = tags 
+                    conv["conversation_tags"] = tags
                     conv["workspace"] = workspace
                     conv["is_360_queue"] = is_360
                     conv["queue_type_360"] = queue_type
                     enriched_count += 1
-                    logger.debug(f"✓ {conv['conversation_id']}: {workspace} | 360={is_360} ({queue_type}) | Tags: {tags}")
+                    logger.debug(f"✓ {conv['conversation_id']}: {workspace} | 360={is_360} ({queue_type})")
                 else:
+                    # Enrichment failed - use default values
+                    conv["conversation_tags"] = []
+                    conv["workspace"] = 'Unknown'
+                    conv["is_360_queue"] = False
+                    conv["queue_type_360"] = None
                     failed_count += 1
             
             # Rate limiting
@@ -727,15 +747,83 @@ def sync_conversations(start_unix: int, end_unix: int, enrich: bool = True) -> i
         logger.info(f"Enrichment complete: {enriched_count} succeeded, {failed_count} failed")
     else:
         logger.info("Step 7: Skipping enrichment (disabled)")
+        
+        # CRITICAL: If enrichment is disabled, still initialize fields
+        for conv in conversations:
+            if "conversation_tags" not in conv:
+                conv["conversation_tags"] = []
+            if "workspace" not in conv:
+                conv["workspace"] = 'Unknown'
+            if "is_360_queue" not in conv:
+                conv["is_360_queue"] = False
+            if "queue_type_360" not in conv:
+                conv["queue_type_360"] = None
+
+    # Step 7.5: NORMALIZE - Ensure all conversations have identical keys
+    logger.info("Step 7.5: Normalizing conversation structures...")
+
+    # Collect all unique keys from all conversations
+    all_field_names = set()
+    for conv in conversations:
+        all_field_names.update(conv.keys())
+
+    logger.info(f"Expected fields: {sorted(all_field_names)}")
+
+    # Ensure every conversation has every field (fill missing with None)
+    for conv in conversations:
+        for field_name in all_field_names:
+            if field_name not in conv:
+                conv[field_name] = None
+                logger.debug(f"Added missing field '{field_name}' to {conv.get('conversation_id', 'unknown')}")
+
+    logger.info(f"✓ All {len(conversations)} conversations now have {len(all_field_names)} fields")
     
     # Step 8: Upsert to Supabase
-    # NOTE: tags field removed to avoid JSONB/array format issues
     logger.info(f"Step 8: Upserting {len(conversations)} conversations to Supabase...")
-    
+
+    # DEBUG: Check for key mismatches BEFORE upserting
+    logger.info("Checking for key mismatches...")
+    all_keys = set()
+    key_counts = {}
+
+    for conv in conversations:
+        conv_keys = frozenset(conv.keys())
+        all_keys.update(conv.keys())
+        
+        key_signature = str(sorted(conv.keys()))
+        if key_signature not in key_counts:
+            key_counts[key_signature] = {'count': 0, 'example': conv['conversation_id']}
+        key_counts[key_signature]['count'] += 1
+
+    logger.info(f"Total unique keys across all conversations: {len(all_keys)}")
+    logger.info(f"All keys: {sorted(all_keys)}")
+
+    if len(key_counts) > 1:
+        logger.warning(f"⚠️  Found {len(key_counts)} different key structures!")
+        for i, (keys, info) in enumerate(key_counts.items(), 1):
+            logger.warning(f"  Structure {i}: {info['count']} conversations (example: {info['example']})")
+            logger.warning(f"    Keys: {keys[:200]}...")  # Truncate if too long
+    else:
+        logger.info("✓ All conversations have identical key structure")
+
     # Process in batches for reliability
     batch_size = 100
     for i in range(0, len(conversations), batch_size):
         batch = conversations[i:i + batch_size]
+        
+        # DEBUG: Log first conversation in batch to see structure
+        if i == 0:
+            logger.info(f"Sample conversation structure (batch 1):")
+            logger.info(f"  Keys: {sorted(batch[0].keys())}")
+            for key in sorted(batch[0].keys()):
+                value = batch[0][key]
+                if value is None:
+                    logger.info(f"    {key}: None")
+                elif isinstance(value, str):
+                    logger.info(f"    {key}: '{value[:50]}...'")
+                else:
+                    logger.info(f"    {key}: {type(value).__name__}")
+        
         supabase.upsert("qa_metrics", batch, on_conflict="conversation_id")
         logger.info(f"  Upserted batch {i//batch_size + 1}/{(len(conversations)-1)//batch_size + 1}")
     
