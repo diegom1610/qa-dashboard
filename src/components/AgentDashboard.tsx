@@ -312,17 +312,15 @@ const fetchData = async () => {
 const applyFilters = async () => {
   let filtered = [...metrics];
 
-  // DEBUG
+  // DEBUG - Remove after confirming fix works
   console.log('=== FILTER DEBUG ===');
   console.log('Total metrics:', metrics.length);
-  console.log('Selected workspaces:', selectedWorkspaces);
-  console.log('Selected reviewers:', selectedReviewers);
-  console.log('Selected reviewees:', selectedReviewees);
-  console.log('Selected groups:', selectedGroups);
+  console.log('Sample metric_date:', metrics[0]?.metric_date);
 
   // Apply date range filter - TIMEZONE SAFE
   const { startDate, endDate } = getDateRange();
   if (startDate && endDate) {
+    // Extract YYYY-MM-DD using LOCAL date components (not UTC conversion)
     const startYear = startDate.getFullYear();
     const startMonth = String(startDate.getMonth() + 1).padStart(2, '0');
     const startDay = String(startDate.getDate()).padStart(2, '0');
@@ -339,32 +337,39 @@ const applyFilters = async () => {
     
     filtered = filtered.filter(m => {
       if (!m.metric_date) return false;
+      
+      // Extract just YYYY-MM-DD from metric_date (handles both formats)
       const metricDateStr = m.metric_date.substring(0, 10);
-      return metricDateStr >= startStr && metricDateStr <= endStr;
+      
+      const inRange = metricDateStr >= startStr && metricDateStr <= endStr;
+      return inRange;
     });
 
     console.log(`Date filter: ${beforeCount} -> ${filtered.length}`);
   }
 
-  // Apply workspace filter - FIXED FOR MULTI-SELECT
+  // Apply workspace filter - CASE-INSENSITIVE
   if (selectedWorkspaces.length > 0) {
     const beforeCount = filtered.length;
     
-    // Filter by any of the selected workspaces
-    filtered = filtered.filter(m => selectedWorkspaces.includes(m.workspace));
+    // DEBUG: Log first few workspace values
+    console.log('Selected workspaces:', selectedWorkspaces);
+    console.log('Sample database workspaces:', filtered.slice(0, 5).map(m => m.workspace));
+    
+    // Case-insensitive comparison to handle lowercase variants (skyprivate vs SkyPrivate)
+    const selectedWorkspacesLower = selectedWorkspaces.map(ws => ws.toLowerCase());
+    console.log('Selected workspaces (lowercase):', selectedWorkspacesLower);
+    
+    filtered = filtered.filter(m => {
+      const workspaceLower = (m.workspace || '').toLowerCase();
+      const matches = selectedWorkspacesLower.includes(workspaceLower);
+      if (filtered.indexOf(m) < 3) {  // Log first 3 for debugging
+        console.log(`  Checking: "${m.workspace}" -> "${workspaceLower}" matches? ${matches}`);
+      }
+      return matches;
+    });
 
     console.log(`Workspace filter (${selectedWorkspaces.join(', ')}): ${beforeCount} -> ${filtered.length}`);
-  }
-
-  // Apply reviewer filter - MULTI-SELECT
-  if (selectedReviewers.length > 0) {
-    const reviewedConversations = allFeedback
-      .filter(f => selectedReviewers.includes(f.reviewer_id))
-      .map(f => f.conversation_id);
-    
-    const beforeCount = filtered.length;
-    filtered = filtered.filter(m => reviewedConversations.includes(m.conversation_id));
-    console.log(`Reviewer filter: ${beforeCount} -> ${filtered.length}`);
   }
 
   // Apply reviewee (agent) filter - MULTI-SELECT
@@ -377,24 +382,34 @@ const applyFilters = async () => {
   // Apply group filter - MULTI-SELECT
   if (selectedGroups.length > 0) {
     try {
-      // Get all agent_ids for selected groups
+      // Fetch agent IDs for ALL selected groups
       const { data: groupMappings } = await supabase
         .from('agent_group_mapping')
         .select('agent_id')
         .in('group_id', selectedGroups);
 
       if (groupMappings && groupMappings.length > 0) {
-        const agentIds = [...new Set(groupMappings.map(m => m.agent_id))];
+        const agentIds = groupMappings.map(m => m.agent_id);
         const beforeCount = filtered.length;
         filtered = filtered.filter(m => agentIds.includes(m.agent_id));
         console.log(`Group filter: ${beforeCount} -> ${filtered.length}`);
       } else {
-        console.log('No group mappings found for selected groups');
+        console.log('No group mappings found');
         filtered = [];
       }
     } catch (err) {
       console.error('Error fetching group mappings:', err);
     }
+  }
+
+  // Apply reviewer filter - MULTI-SELECT
+  if (selectedReviewers.length > 0) {
+    const reviewedConversations = allFeedback
+      .filter(f => selectedReviewers.includes(f.reviewer_id))
+      .map(f => f.conversation_id);
+    const beforeCount = filtered.length;
+    filtered = filtered.filter(m => reviewedConversations.includes(m.conversation_id));
+    console.log(`Reviewer filter: ${beforeCount} -> ${filtered.length}`);
   }
 
   // Filter by human review status
@@ -403,13 +418,13 @@ const applyFilters = async () => {
     const beforeCount = filtered.length;
     filtered = filtered.filter(m => conversationsWithHumanFeedback.has(m.conversation_id));
     console.log(`Human reviewed filter: ${beforeCount} -> ${filtered.length}`);
+    console.log('Total human feedback records:', allFeedback.length);
   }
 
   console.log('=== FINAL COUNT:', filtered.length, '===');
   
   setFilteredMetrics(filtered);
 };
-
 
   const uniqueReviewers = Array.from(
     new Set(allFeedback.map(f => f.reviewer_id))
