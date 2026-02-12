@@ -349,27 +349,40 @@ const applyFilters = async () => {
   }
 
   // Apply workspace filter - CASE-INSENSITIVE
+  // For 360 workspaces, an additional restriction applies:
+  // only conversations reviewed by nicholas@skyprivate.com are shown.
+  // reviewer_name stores user.email at submit time (see useFeedback.ts).
+  const NICHOLAS_EMAIL = 'nicholas@skyprivate.com';
+  const is360Workspace = (ws: string) => ws.startsWith('360_');
+
   if (selectedWorkspaces.length > 0) {
     const beforeCount = filtered.length;
-    
-    // DEBUG: Log first few workspace values
-    console.log('Selected workspaces:', selectedWorkspaces);
-    console.log('Sample database workspaces:', filtered.slice(0, 5).map(m => m.workspace));
-    
-    // Case-insensitive comparison to handle lowercase variants (skyprivate vs SkyPrivate)
+
+    // Case-insensitive match so legacy lowercase variants still resolve correctly
     const selectedWorkspacesLower = selectedWorkspaces.map(ws => ws.toLowerCase());
-    console.log('Selected workspaces (lowercase):', selectedWorkspacesLower);
-    
+
     filtered = filtered.filter(m => {
       const workspaceLower = (m.workspace || '').toLowerCase();
-      const matches = selectedWorkspacesLower.includes(workspaceLower);
-      if (filtered.indexOf(m) < 3) {  // Log first 3 for debugging
-        console.log(`  Checking: "${m.workspace}" -> "${workspaceLower}" matches? ${matches}`);
-      }
-      return matches;
+      return selectedWorkspacesLower.includes(workspaceLower);
     });
 
     console.log(`Workspace filter (${selectedWorkspaces.join(', ')}): ${beforeCount} -> ${filtered.length}`);
+
+    // Nicholas-only restriction: when any 360 workspace is selected,
+    // only show 360 conversations that nicholas@skyprivate.com has reviewed.
+    // Non-360 workspace rows in the same selection pass through untouched.
+    if (selectedWorkspaces.some(is360Workspace)) {
+      const nicholasReviewedIds = new Set(
+        allFeedback
+          .filter(f => f.reviewer_name === NICHOLAS_EMAIL)
+          .map(f => f.conversation_id)
+      );
+      const before360Count = filtered.length;
+      filtered = filtered.filter(m =>
+        !is360Workspace(m.workspace || '') || nicholasReviewedIds.has(m.conversation_id)
+      );
+      console.log(`Nicholas-only 360 filter: ${before360Count} -> ${filtered.length}`);
+    }
   }
 
   // Apply reviewee (agent) filter - MULTI-SELECT
