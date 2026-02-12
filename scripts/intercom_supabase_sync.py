@@ -176,12 +176,18 @@ def determine_workspace(tags: List[str], is_360_queue: bool = False) -> str:
     """
     Determine workspace from tags using CONTAINS logic.
     If is_360_queue=True, adds '360_' prefix to the workspace name.
+
+    Fallback rule: if is_360_queue=True but no workspace keyword is found in
+    the tags (empty tags, or tags like '#WhaleHunter' with no SP/CMD marker),
+    default to '360_SkyPrivate' rather than leaving the workspace as 'Unknown'.
+    This covers conversations correctly identified as 360 queue by their 360-
+    specific tags (e.g. '3 - Payments') but lacking an explicit workspace tag.
     """
     if not tags:
         base_workspace = 'Unknown'
     else:
         all_tags_lower = ' '.join(t.lower() for t in tags)
-        
+
         base_workspace = 'Unknown'
         for workspace, keywords in WORKSPACE_KEYWORDS.items():
             for keyword in keywords:
@@ -190,11 +196,16 @@ def determine_workspace(tags: List[str], is_360_queue: bool = False) -> str:
                     break
             if base_workspace != 'Unknown':
                 break
-    
+
     # Add 360 prefix if applicable
     if is_360_queue and base_workspace != 'Unknown':
         return f'360_{base_workspace}'
-    
+
+    # Fallback: 360 queue conversations without a recognisable workspace tag
+    # default to 360_SkyPrivate (all 360 queue activity is SkyPrivate-side)
+    if is_360_queue and base_workspace == 'Unknown':
+        return '360_SkyPrivate'
+
     return base_workspace
 
 
@@ -731,7 +742,7 @@ def sync_conversations(start_unix: int, end_unix: int, enrich: bool = True) -> i
                     conv["is_360_queue"] = is_360
                     conv["queue_type_360"] = queue_type
                     enriched_count += 1
-                    logger.debug(f"✓ {conv['conversation_id']}: {workspace} | 360={is_360} ({queue_type})")
+                    logger.debug(f"âœ“ {conv['conversation_id']}: {workspace} | 360={is_360} ({queue_type})")
                 else:
                     # Enrichment failed - use default values
                     conv["conversation_tags"] = []
@@ -776,7 +787,7 @@ def sync_conversations(start_unix: int, end_unix: int, enrich: bool = True) -> i
                 conv[field_name] = None
                 logger.debug(f"Added missing field '{field_name}' to {conv.get('conversation_id', 'unknown')}")
 
-    logger.info(f"✓ All {len(conversations)} conversations now have {len(all_field_names)} fields")
+    logger.info(f"âœ“ All {len(conversations)} conversations now have {len(all_field_names)} fields")
     
     # Step 8: Upsert to Supabase
     logger.info(f"Step 8: Upserting {len(conversations)} conversations to Supabase...")
@@ -799,12 +810,12 @@ def sync_conversations(start_unix: int, end_unix: int, enrich: bool = True) -> i
     logger.info(f"All keys: {sorted(all_keys)}")
 
     if len(key_counts) > 1:
-        logger.warning(f"⚠️  Found {len(key_counts)} different key structures!")
+        logger.warning(f"âš ï¸  Found {len(key_counts)} different key structures!")
         for i, (keys, info) in enumerate(key_counts.items(), 1):
             logger.warning(f"  Structure {i}: {info['count']} conversations (example: {info['example']})")
             logger.warning(f"    Keys: {keys[:200]}...")  # Truncate if too long
     else:
-        logger.info("✓ All conversations have identical key structure")
+        logger.info("âœ“ All conversations have identical key structure")
 
     # Process in batches for reliability
     batch_size = 100
@@ -827,7 +838,7 @@ def sync_conversations(start_unix: int, end_unix: int, enrich: bool = True) -> i
         supabase.upsert("qa_metrics", batch, on_conflict="conversation_id")
         logger.info(f"  Upserted batch {i//batch_size + 1}/{(len(conversations)-1)//batch_size + 1}")
     
-    logger.info(f"✅ Sync complete! Processed {len(conversations)} conversations")
+    logger.info(f"âœ… Sync complete! Processed {len(conversations)} conversations")
     return len(conversations)
 
 # -----------------------------
@@ -870,10 +881,10 @@ def main():
     
     try:
         count = sync_conversations(start_unix, end_unix, enrich=not args.no_enrich)
-        logger.info(f"✅ SUCCESS: Synced {count} conversations")
+        logger.info(f"âœ… SUCCESS: Synced {count} conversations")
         return 0
     except Exception as e:
-        logger.exception(f"❌ FAILED: {e}")
+        logger.exception(f"âŒ FAILED: {e}")
         return 1
 
 if __name__ == "__main__":
