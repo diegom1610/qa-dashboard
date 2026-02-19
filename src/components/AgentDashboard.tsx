@@ -368,6 +368,30 @@ const applyFilters = async () => {
 
     console.log(`Workspace filter (${selectedWorkspaces.join(', ')}): ${beforeCount} -> ${filtered.length}`);
 
+    // Diego & Anna workspace remapping: their reviews of 360 conversations
+    // should appear in regular workspaces (SkyPrivate/CMD) not 360 workspaces.
+    // This preserves database integrity while displaying their work separately.
+    const DIEGO_ANNA_EMAILS = ['diego@skyprivate.com', 'anna@skyprivate.com'];
+    const diegoAnnaReviewedIds = new Set(
+      allFeedback
+        .filter(f => DIEGO_ANNA_EMAILS.includes(f.reviewer_name))
+        .map(f => f.conversation_id)
+    );
+
+    filtered = filtered.map(m => {
+      // If Diego or Anna reviewed this conversation, strip the 360_ prefix
+      // for display purposes (database remains unchanged)
+      if (diegoAnnaReviewedIds.has(m.conversation_id) && is360Workspace(m.workspace || '')) {
+        return {
+          ...m,
+          workspace: m.workspace?.replace('360_', '') || m.workspace
+        };
+      }
+      return m;
+    });
+
+    console.log(`Diego/Anna workspace remap applied`);
+
     // Nicholas-only restriction: when any 360 workspace is selected,
     // only show 360 conversations that nicholas@skyprivate.com has reviewed.
     // Non-360 workspace rows in the same selection pass through untouched.
