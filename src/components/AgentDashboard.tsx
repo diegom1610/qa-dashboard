@@ -348,13 +348,47 @@ const applyFilters = async () => {
     console.log(`Date filter: ${beforeCount} -> ${filtered.length}`);
   }
 
-  // Apply workspace filter - CASE-INSENSITIVE
-  // For 360 workspaces, an additional restriction applies:
-  // only conversations reviewed by nicholas@skyprivate.com are shown.
-  // reviewer_name stores user.email at submit time (see useFeedback.ts).
+  // ================================================================
+  // DIEGO & ANNA WORKSPACE REMAPPING (BEFORE ANY WORKSPACE FILTERING)
+  // ================================================================
+  // Business rule: Diego and Anna's reviews should appear in regular
+  // workspaces (SkyPrivate/CMD), NOT in 360 workspaces, even if the
+  // conversation has 360-related tags. Only Nicholas's reviews go to 360.
+  //
+  // This remapping runs BEFORE the workspace filter so that when users
+  // select "SkyPrivate", Diego/Anna's 360 conversations (after remapping)
+  // will match and appear.
+  // ================================================================
   const NICHOLAS_EMAIL = 'nicholas@skyprivate.com';
+  const DIEGO_ANNA_EMAILS = ['diego@skyprivate.com', 'anna@skyprivate.com'];
   const is360Workspace = (ws: string) => ws.startsWith('360_');
 
+  // Build sets of conversation IDs for each reviewer group
+  const diegoAnnaReviewedIds = new Set(
+    allFeedback
+      .filter(f => DIEGO_ANNA_EMAILS.includes(f.reviewer_name))
+      .map(f => f.conversation_id)
+  );
+  const nicholasReviewedIds = new Set(
+    allFeedback
+      .filter(f => f.reviewer_name === NICHOLAS_EMAIL)
+      .map(f => f.conversation_id)
+  );
+
+  // Remap Diego/Anna's 360 conversations to regular workspaces
+  // This happens for ALL conversations, regardless of selected filters
+  filtered = filtered.map(m => {
+    if (diegoAnnaReviewedIds.has(m.conversation_id) && is360Workspace(m.workspace || '')) {
+      return {
+        ...m,
+        workspace: m.workspace?.replace('360_', '') || m.workspace
+      };
+    }
+    return m;
+  });
+  console.log(`Diego/Anna workspace remap applied globally`);
+
+  // Apply workspace filter - CASE-INSENSITIVE
   if (selectedWorkspaces.length > 0) {
     const beforeCount = filtered.length;
 
@@ -368,53 +402,17 @@ const applyFilters = async () => {
 
     console.log(`Workspace filter (${selectedWorkspaces.join(', ')}): ${beforeCount} -> ${filtered.length}`);
 
-    // DIEGO & ANNA EXCLUSION FROM 360 WORKSPACES
-    // Business rule: Diego and Anna's reviews should NEVER appear in 360 workspaces,
-    // even if the conversation has 360-related tags. Only Nicholas's reviews go to 360.
-    // When a 360 workspace is selected, we remove conversations reviewed by Diego/Anna.
-    // When a regular workspace is selected, we remap their 360 conversations to show there.
-    const NICHOLAS_EMAIL = 'nicholas@skyprivate.com';
-    const DIEGO_ANNA_EMAILS = ['diego@skyprivate.com', 'anna@skyprivate.com'];
+    // Nicholas-only restriction for 360 workspaces:
+    // When user selects a 360 workspace, only show Nicholas's reviews.
+    // Diego/Anna's conversations were already remapped above, so they won't
+    // match 360 workspace selections and are naturally excluded here.
     const has360Selection = selectedWorkspaces.some(is360Workspace);
-
-    // Build sets of conversation IDs for each reviewer group
-    const diegoAnnaReviewedIds = new Set(
-      allFeedback
-        .filter(f => DIEGO_ANNA_EMAILS.includes(f.reviewer_name))
-        .map(f => f.conversation_id)
-    );
-    const nicholasReviewedIds = new Set(
-      allFeedback
-        .filter(f => f.reviewer_name === NICHOLAS_EMAIL)
-        .map(f => f.conversation_id)
-    );
-
     if (has360Selection) {
-      // User selected a 360 workspace (e.g., "360 view - SkyPrivate")
-      // Remove ALL conversations reviewed by Diego or Anna
       const before360Count = filtered.length;
-      filtered = filtered.filter(m => !diegoAnnaReviewedIds.has(m.conversation_id));
-      console.log(`Diego/Anna 360 exclusion: ${before360Count} -> ${filtered.length}`);
-
-      // Keep only conversations reviewed by Nicholas (existing Nicholas-only rule)
-      const beforeNicholasCount = filtered.length;
       filtered = filtered.filter(m =>
         !is360Workspace(m.workspace || '') || nicholasReviewedIds.has(m.conversation_id)
       );
-      console.log(`Nicholas-only 360 filter: ${beforeNicholasCount} -> ${filtered.length}`);
-    } else {
-      // User selected regular workspace (e.g., "SkyPrivate")
-      // Remap Diego/Anna's 360 reviews to appear in regular workspaces
-      filtered = filtered.map(m => {
-        if (diegoAnnaReviewedIds.has(m.conversation_id) && is360Workspace(m.workspace || '')) {
-          return {
-            ...m,
-            workspace: m.workspace?.replace('360_', '') || m.workspace
-          };
-        }
-        return m;
-      });
-      console.log(`Diego/Anna workspace remap applied (non-360 selection)`);
+      console.log(`Nicholas-only 360 filter: ${before360Count} -> ${filtered.length}`);
     }
   }
 
