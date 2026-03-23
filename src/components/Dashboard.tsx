@@ -19,7 +19,7 @@
  *       └── FeedbackPanel (submit new review)
  */
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LogOut, BarChart3, RefreshCw, X, Menu, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useMetrics } from '../hooks/useMetrics';
@@ -80,8 +80,16 @@ export function Dashboard({ viewMode, onViewModeChange }: DashboardProps) {
   const [filters, setFilters] = useState<FilterState>(initialFilters);
   const [syncing, setSyncing] = useState(false);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
+  const [conversationParticipants, setConversationParticipants] = useState<string[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [selectedEvaluatedAgent, setSelectedEvaluatedAgent] = useState<string>('');
   const { user, signOut } = useAuth();
+
+  const agentName = agents.find((agent) => filters.agentIds.includes(agent.id))?.agent_name || '';
+
+  useEffect(() => {
+    setSelectedEvaluatedAgent(agentName);
+  }, [agentName]);
   const { agents, loading: agentsLoading } = useAgents(true);
   const { metrics, loading: metricsLoading, error, refetch } = useMetrics(filters);
   const { feedback: allFeedback, refetch: refetchFeedback } = useFeedback();
@@ -261,9 +269,11 @@ export function Dashboard({ viewMode, onViewModeChange }: DashboardProps) {
                   loading={metricsLoading}
                   onViewConversation={(conversationId) => {
                     setSelectedConversationId(conversationId);
+                    setConversationParticipants([]);
                   }}
                   selectedConversationId={selectedConversationId}
                   onFeedbackSubmitted={handleFeedbackSubmitted}
+                  participants={conversationParticipants}
                 />
               </div>
 
@@ -285,7 +295,7 @@ export function Dashboard({ viewMode, onViewModeChange }: DashboardProps) {
                       </button>
                     </div>
                     <div className="h-[calc(100vh-200px)] max-h-[800px] overflow-y-auto">
-                      <ConversationViewer conversationId={selectedConversationId} />
+                      <ConversationViewer conversationId={selectedConversationId} onParticipantsFound={setConversationParticipants}/>
                     </div>
                   </div>
                 </div>

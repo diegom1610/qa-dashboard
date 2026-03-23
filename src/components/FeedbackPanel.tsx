@@ -14,6 +14,7 @@ interface FeedbackPanelProps {
   conversationId: string;
   agentName: string;
   onFeedbackSubmitted?: () => void;
+  participants?: string[];
 }
 
 const RATING_CATEGORIES = [
@@ -28,6 +29,7 @@ export function FeedbackPanel({
   conversationId,
   agentName,
   onFeedbackSubmitted,
+  participants,
 }: FeedbackPanelProps) {
   const [categoryScores, setCategoryScores] = useState<{
     logic_path: number;
@@ -51,6 +53,12 @@ export function FeedbackPanel({
   const [mentionSearch, setMentionSearch] = useState('');
   const [userSuggestions, setUserSuggestions] = useState<UserSuggestion[]>([]);
   const [cursorPosition, setCursorPosition] = useState(0);
+
+  const [selectedEvaluatedAgent, setSelectedEvaluatedAgent] = useState<string>('');
+
+  useEffect(() => {
+    setSelectedEvaluatedAgent(agentName);
+  }, [agentName]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { submitFeedback, feedback } = useFeedback(conversationId);
@@ -225,6 +233,7 @@ export function FeedbackPanel({
         solution_score: categoryScores.solution,
         communication_score: categoryScores.communication,
         language_usage_score: categoryScores.language_usage,
+        evaluated_agent_name: selectedEvaluatedAgent || agentName,
       });
 
       const agentEmail = await getAgentEmailFromConversation(conversationId);

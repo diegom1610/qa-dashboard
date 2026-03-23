@@ -297,6 +297,8 @@ export interface Database {
           solution_score: number;
           communication_score: number;
           language_usage_score: number;
+          evaluated_agent_id: string | null;
+          evaluated_agent_name: string | null;  
           created_at: string;
           updated_at: string;
         };
@@ -313,6 +315,8 @@ export interface Database {
           solution?: boolean;
           communication?: boolean;
           language_usage?: boolean;
+          evaluated_agent_id?: string | null;
+          evaluated_agent_name?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -329,6 +333,8 @@ export interface Database {
           solution?: boolean;
           communication?: boolean;
           language_usage?: boolean;
+          evaluated_agent_id?: string | null;
+          evaluated_agent_name?: string | null;
           created_at?: string;
           updated_at?: string;
         };

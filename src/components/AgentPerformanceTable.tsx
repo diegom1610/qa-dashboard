@@ -33,33 +33,41 @@ export function AgentPerformanceTable({ metrics, feedback }: AgentPerformanceTab
     }>();
 
     metrics.forEach((metric) => {
-      if (!agentMap.has(metric.agent_name)) {
-        agentMap.set(metric.agent_name, {
-          conversations: [],
-          scores: [],
-          reviewCount: 0,
-          commentCount: 0,
-        });
-      }
+      // Determine which agents to attribute this conversation to.
+      // If any feedback for this conversation specifies an evaluated_agent_name,
+      // use those agents; otherwise fall back to the metric's agent_name.
+      const metricFeedback = feedback.filter(f => f.conversation_id === metric.conversation_id);
+      const evaluatedAgents = [
+        ...new Set(metricFeedback.map(f => f.evaluated_agent_name).filter(Boolean) as string[]),
+      ];
+      const agentsToAttribute = evaluatedAgents.length > 0 ? evaluatedAgents : [metric.agent_name];
 
-      const agentData = agentMap.get(metric.agent_name)!;
-      agentData.conversations.push(metric.conversation_id);
+      agentsToAttribute.forEach((agentName) => {
+        if (!agentMap.has(agentName)) {
+          agentMap.set(agentName, { conversations: [], scores: [], reviewCount: 0, commentCount: 0 });
+        }
+        const agentData = agentMap.get(agentName)!;
+        agentData.conversations.push(metric.conversation_id);
 
-      const score = calculateConversationScore(
-        metric.conversation_id,
-        feedback,
-        metric.ai_score
-      );
-
-      if (score !== null) {
-        agentData.scores.push(score);
-      }
+        // Score: average of feedback records attributed to this agent for this conversation
+        const relevantFeedback = metricFeedback.filter(f =>
+          (f.evaluated_agent_name ?? metric.agent_name) === agentName
+        );
+        const humanRatings = relevantFeedback.map(f => (f.rating / 20) * 100);
+        if (humanRatings.length > 0) {
+          const avg = humanRatings.reduce((s, r) => s + r, 0) / humanRatings.length;
+          agentData.scores.push(avg);
+        } else if (metric.ai_score !== null) {
+          agentData.scores.push((metric.ai_score / 5) * 100);
+        }
+      });
     });
 
     feedback.forEach((fb) => {
       const metric = metrics.find(m => m.conversation_id === fb.conversation_id);
-      if (metric) {
-        const agentData = agentMap.get(metric.agent_name);
+      const attributedAgent = fb.evaluated_agent_name ?? metric?.agent_name;
+      if (attributedAgent) {
+        const agentData = agentMap.get(attributedAgent);
         if (agentData) {
           agentData.reviewCount++;
           if (fb.feedback_text && fb.feedback_text.trim().length > 0) {

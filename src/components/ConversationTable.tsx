@@ -31,6 +31,7 @@ interface ConversationTableProps {
   onViewConversation?: (conversationId: string) => void;
   selectedConversationId?: string | null;
   onFeedbackSubmitted?: () => void;
+  participants?: string[];
 }
 
 /**
@@ -44,7 +45,7 @@ interface ConversationTableProps {
  * - sortColumn: Which column is currently used for sorting
  * - sortDirection: 'asc' or 'desc'
  */
-export function ConversationTable({ metrics, loading, onViewConversation, selectedConversationId, onFeedbackSubmitted }: ConversationTableProps) {
+export function ConversationTable({ metrics, loading, onViewConversation, selectedConversationId, onFeedbackSubmitted, participants }: ConversationTableProps) {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [sortColumn, setSortColumn] = useState<keyof QAMetric>('metric_date');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
@@ -436,6 +437,7 @@ export function ConversationTable({ metrics, loading, onViewConversation, select
                             conversationId={metric.conversation_id}
                             agentName={metric.agent_name}
                             onFeedbackSubmitted={handleFeedbackSubmitted}
+                            participants={participants}
                           />
                         </div>
                       </td>

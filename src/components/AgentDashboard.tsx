@@ -419,7 +419,15 @@ const applyFilters = async () => {
   // Apply reviewee (agent) filter - MULTI-SELECT
   if (selectedReviewees.length > 0) {
     const beforeCount = filtered.length;
-    filtered = filtered.filter(m => selectedReviewees.includes(m.agent_name));
+    filtered = filtered.filter(m => {
+      // Include if the metric belongs to the selected agent
+      if (selectedReviewees.includes(m.agent_name)) return true;
+      // Also include if any feedback in this conversation was specifically
+      // directed at one of the selected reviewees
+      return (m.human_feedback ?? []).some(
+        (f: any) => f.evaluated_agent_name && selectedReviewees.includes(f.evaluated_agent_name)
+      );
+    });
     console.log(`Reviewee filter: ${beforeCount} -> ${filtered.length}`);
   }
 

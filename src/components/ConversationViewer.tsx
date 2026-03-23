@@ -29,12 +29,13 @@ interface ConversationThread {
 
 interface ConversationViewerProps {
   conversationId: string | null;
+  onParticipantsFound?: (participants: string[]) => void;
 }
 
 // INTERCOM APP ID - Update this if your app ID is different
 const INTERCOM_APP_ID = 'b37vb7kt';
 
-export function ConversationViewer({ conversationId }: ConversationViewerProps) {
+export function ConversationViewer({ conversationId, onParticipantsFound }: ConversationViewerProps) {
   const [thread, setThread] = useState<ConversationThread | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,37 +48,50 @@ export function ConversationViewer({ conversationId }: ConversationViewerProps) 
     }
   }, [conversationId]);
 
-  const loadConversation = async (convId: string) => {
-    setLoading(true);
-    setError(null);
+const loadConversation = async (convId: string) => {
+  setLoading(true);
+  setError(null);
+  let data: ConversationThread | null = null;
 
-    try {
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/fetch-conversation-thread`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ conversation_id: convId })
-        }
-      );
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || `HTTP ${response.status}`);
+  try {
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/fetch-conversation-thread`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ conversation_id: convId })
       }
+    );
 
-      const data = await response.json();
-      setThread(data);
-    } catch (err) {
-      console.error('Failed to load conversation:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load conversation');
-    } finally {
-      setLoading(false);
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || `HTTP ${response.status}`);
     }
-  };
+
+    data = await response.json();
+    setThread(data);
+  } catch (err) {
+    console.error('Failed to load conversation:', err);
+    setError(err instanceof Error ? err.message : 'Failed to load conversation');
+  } finally {
+    setLoading(false);
+
+    if (data) {
+      const participants = [
+       ...new Set(
+         data.messages
+          .filter((m: Message) => !m.is_note && (m.author_type === 'admin' || m.author_type === 'bot'))
+          .map((m: Message) => m.author_name)
+          .filter(Boolean)
+  ),
+];
+onParticipantsFound?.(participants);
+    }
+  }
+};
 
   if (!conversationId) {
     return (
