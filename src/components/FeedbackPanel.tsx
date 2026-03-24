@@ -1,5 +1,5 @@
 import { useState, FormEvent, useEffect, useRef } from 'react';
-import { Star, CheckCircle, AlertCircle, Send, Lock, Shield, AtSign } from 'lucide-react';
+import { Star, CheckCircle, AlertCircle, Send, Lock, Shield, AtSign, ImagePlus, X } from 'lucide-react';
 import { useFeedback } from '../hooks/useFeedback';
 import { useAuth } from '../contexts/AuthContext';
 import { supabase } from '../lib/supabase';
@@ -53,6 +53,9 @@ export function FeedbackPanel({
   const [mentionSearch, setMentionSearch] = useState('');
   const [userSuggestions, setUserSuggestions] = useState<UserSuggestion[]>([]);
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [uploadedImages, setUploadedImages] = useState<File[]>([]);
+  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [selectedEvaluatedAgent, setSelectedEvaluatedAgent] = useState<string>('');
 
@@ -176,6 +179,53 @@ export function FeedbackPanel({
     }
   };
 
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/'));
+    addImages(files);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const imageFiles = Array.from(e.clipboardData.items)
+      .filter(item => item.type.startsWith('image/'))
+      .map(item => item.getAsFile())
+      .filter(Boolean) as File[];
+    if (imageFiles.length > 0) addImages(imageFiles);
+  };
+
+  const addImages = (files: File[]) => {
+    setUploadedImages(prev => [...prev, ...files]);
+    files.forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => setImagePreviewUrls(prev => [...prev, reader.result as string]);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const removeImage = (index: number) => {
+    setUploadedImages(prev => prev.filter((_, i) => i !== index));
+    setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadImages = async (feedbackId: string): Promise<void> => {
+    if (!user || uploadedImages.length === 0) return;
+    for (const file of uploadedImages) {
+      const ext = file.name.split('.').pop();
+      const path = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+      const { error: uploadError } = await supabase.storage.from('feedback_images').upload(path, file);
+      if (uploadError) { console.error('Image upload error:', uploadError); continue; }
+      await (supabase as any).from('feedback_images').insert({
+        comment_id: feedbackId,
+        conversation_id: conversationId,
+        uploaded_by: user.id,
+        storage_path: path,
+        file_name: file.name,
+        file_size: file.size,
+        mime_type: file.type,
+      });
+    }
+  };
+
   const getAgentEmailFromConversation = async (convId: string): Promise<string | null> => {
     try {
       const { data, error } = await supabase
@@ -235,6 +285,8 @@ export function FeedbackPanel({
         language_usage_score: categoryScores.language_usage,
         evaluated_agent_name: selectedEvaluatedAgent || agentName,
       });
+
+      await uploadImages(feedbackData.id);
 
       const agentEmail = await getAgentEmailFromConversation(conversationId);
       if (agentEmail) {
@@ -316,6 +368,8 @@ export function FeedbackPanel({
         language_usage: 0,
       });
       setFeedbackText('');
+      setUploadedImages([]);
+      setImagePreviewUrls([]);
 
       if (onFeedbackSubmitted) {
         onFeedbackSubmitted();
@@ -503,6 +557,7 @@ export function FeedbackPanel({
               id="feedbackText"
               value={feedbackText}
               onChange={handleFeedbackTextChange}
+              onPaste={handlePaste}
               rows={4}
               placeholder="Provide specific examples and context... Use @ to mention someone"
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition resize-none"
@@ -542,6 +597,45 @@ export function FeedbackPanel({
               {feedbackText.length} / 1000 characters
             </p>
           </div>
+
+          <div className="mt-2">
+            <label className="flex items-center gap-2 cursor-pointer text-sm text-blue-600 hover:text-blue-700 w-fit">
+              <ImagePlus className="w-4 h-4" />
+              <span>Add screenshots or images</span>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageSelect}
+                className="hidden"
+              />
+            </label>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Or paste a screenshot directly into the text box (Ctrl+V / Cmd+V)
+            </p>
+          </div>
+
+          {imagePreviewUrls.length > 0 && (
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {imagePreviewUrls.map((url, index) => (
+                <div key={index} className="relative group">
+                  <img
+                    src={url}
+                    alt={`Screenshot ${index + 1}`}
+                    className="w-full h-24 object-cover rounded-lg border border-slate-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeImage(index)}
+                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {submitStatus === 'success' && (
