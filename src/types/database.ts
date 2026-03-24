@@ -315,6 +315,11 @@ export interface Database {
           solution?: boolean;
           communication?: boolean;
           language_usage?: boolean;
+          logic_path_score?: number;
+          information_score?: number;
+          solution_score?: number;
+          communication_score?: number;
+          language_usage_score?: number;
           evaluated_agent_id?: string | null;
           evaluated_agent_name?: string | null;
           created_at?: string;
@@ -333,6 +338,11 @@ export interface Database {
           solution?: boolean;
           communication?: boolean;
           language_usage?: boolean;
+          logic_path_score?: number;
+          information_score?: number;
+          solution_score?: number;
+          communication_score?: number;
+          language_usage_score?: number;
           evaluated_agent_id?: string | null;
           evaluated_agent_name?: string | null;
           created_at?: string;

@@ -19,7 +19,7 @@
  *       └── FeedbackPanel (submit new review)
  */
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { LogOut, BarChart3, RefreshCw, X, Menu, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useMetrics } from '../hooks/useMetrics';
@@ -82,14 +82,7 @@ export function Dashboard({ viewMode, onViewModeChange }: DashboardProps) {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [conversationParticipants, setConversationParticipants] = useState<string[]>([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [selectedEvaluatedAgent, setSelectedEvaluatedAgent] = useState<string>('');
   const { user, signOut } = useAuth();
-
-  const agentName = agents.find((agent) => filters.agentIds.includes(agent.id))?.agent_name || '';
-
-  useEffect(() => {
-    setSelectedEvaluatedAgent(agentName);
-  }, [agentName]);
   const { agents, loading: agentsLoading } = useAgents(true);
   const { metrics, loading: metricsLoading, error, refetch } = useMetrics(filters);
   const { feedback: allFeedback, refetch: refetchFeedback } = useFeedback();
