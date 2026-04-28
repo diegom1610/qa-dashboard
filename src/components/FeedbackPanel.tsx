@@ -214,7 +214,7 @@ export function FeedbackPanel({
       const path = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
       const { error: uploadError } = await supabase.storage.from('feedback_images').upload(path, file);
       if (uploadError) { console.error('Image upload error:', uploadError); continue; }
-      await (supabase as any).from('feedback_images').insert({
+      await supabase.from('feedback_images').insert({
         comment_id: feedbackId,
         conversation_id: conversationId,
         uploaded_by: user.id,

@@ -40,6 +40,7 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
   const [userRole, setUserRole] = useState<string>('agent');
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
+  const [commentImages, setCommentImages] = useState<Record<string, { url: string; file_name: string }[]>>({});
 
   useEffect(() => {
     fetchComments();
@@ -88,7 +89,34 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
         .order('created_at', { ascending: true });
 
       if (error) throw error;
-      setComments(data || []);
+      const loadedComments = data || [];
+      setComments(loadedComments);
+
+      // Fetch images for all comments in one query
+      if (loadedComments.length > 0) {
+        const commentIds = loadedComments.map((c) => c.id);
+        const { data: imgData } = await supabase
+          .from('feedback_images')
+          .select('comment_id, storage_path, file_name')
+          .in('comment_id', commentIds);
+
+        if (imgData && imgData.length > 0) {
+          const imageMap: Record<string, { url: string; file_name: string }[]> = {};
+
+          imgData.forEach((img) => {
+            const { data: urlData } = supabase.storage
+              .from('feedback_images')
+              .getPublicUrl(img.storage_path);
+
+            if (urlData?.publicUrl) {
+              if (!imageMap[img.comment_id]) imageMap[img.comment_id] = [];
+              imageMap[img.comment_id].push({ url: urlData.publicUrl, file_name: img.file_name });
+            }
+          });
+
+          setCommentImages(imageMap);
+        }
+      }
     } catch (error) {
       console.error('Error fetching comments:', error);
     } finally {
@@ -381,6 +409,25 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
                   <p className="text-sm text-slate-700 whitespace-pre-wrap ml-9">
                     {comment.comment_text}
                   </p>
+                  {commentImages[comment.id] && commentImages[comment.id].length > 0 && (
+                    <div className="mt-2 ml-9 grid grid-cols-3 gap-2">
+                      {commentImages[comment.id].map((img, idx) => (
+                        <a
+                          key={idx}
+                          href={img.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title={img.file_name}
+                        >
+                          <img
+                            src={img.url}
+                            alt={img.file_name}
+                            className="w-full h-24 object-cover rounded-lg border border-slate-200 hover:opacity-90 transition cursor-pointer"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

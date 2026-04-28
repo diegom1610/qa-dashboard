@@ -39,6 +39,7 @@ export interface Database {
           active?: boolean;
           created_at?: string;
         };
+        Relationships: [];
       };
       qa_metrics: {
         Row: {
@@ -89,6 +90,7 @@ export interface Database {
           raw_data?: any;
           synced_at?: string;
         };
+        Relationships: [];
       };
       workspaces: {
         Row: {
@@ -121,6 +123,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       agent_groups: {
         Row: {
@@ -150,6 +153,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       agent_workspace_mapping: {
         Row: {
@@ -170,6 +174,7 @@ export interface Database {
           workspace_id?: string;
           created_at?: string;
         };
+        Relationships: [];
       };
       user_settings: {
         Row: {
@@ -196,6 +201,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       feedback_comments: {
         Row: {
@@ -231,6 +237,7 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
       comment_mentions: {
         Row: {
@@ -257,6 +264,7 @@ export interface Database {
           notified?: boolean;
           created_at?: string;
         };
+        Relationships: [];
       };
       agent_group_mapping: {
         Row: {
@@ -277,6 +285,43 @@ export interface Database {
           group_id?: string;
           created_at?: string;
         };
+        Relationships: [];
+      };
+      feedback_images: {
+        Row: {
+          id: string;
+          comment_id: string;
+          conversation_id: string;
+          uploaded_by: string;
+          storage_path: string;
+          file_name: string;
+          file_size: number;
+          mime_type: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          comment_id: string;
+          conversation_id: string;
+          uploaded_by: string;
+          storage_path: string;
+          file_name: string;
+          file_size: number;
+          mime_type: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          comment_id?: string;
+          conversation_id?: string;
+          uploaded_by?: string;
+          storage_path?: string;
+          file_name?: string;
+          file_size?: number;
+          mime_type?: string;
+          created_at?: string;
+        };
+        Relationships: [];
       };
       human_feedback: {
         Row: {
@@ -298,7 +343,7 @@ export interface Database {
           communication_score: number;
           language_usage_score: number;
           evaluated_agent_id: string | null;
-          evaluated_agent_name: string | null;  
+          evaluated_agent_name: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -348,7 +393,27 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
+        Relationships: [];
       };
+    };
+    Views: {
+      user_roles: {
+        Row: {
+          id: string | null;
+          email: string | null;
+          role: string | null;
+        };
+        Relationships: [];
+      };
+    };
+    Functions: {
+      [_ in never]: never;
+    };
+    Enums: {
+      [_ in never]: never;
+    };
+    CompositeTypes: {
+      [_ in never]: never;
     };
   };
 }

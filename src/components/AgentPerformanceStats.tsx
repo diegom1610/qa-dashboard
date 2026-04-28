@@ -20,14 +20,11 @@ export function AgentPerformanceStats({ metrics, feedback }: AgentPerformanceSta
       return [];
     }
 
-    const conversationScores = metrics.map((metric) => {
-      const score = calculateConversationScore(
-        metric.conversation_id,
-        feedback,
-        metric.ai_score
-      );
-      return score !== null ? score : 0;
-    }).filter(score => score > 0);
+    const conversationScores = metrics
+      .map((metric) =>
+        calculateConversationScore(metric.conversation_id, feedback, metric.ai_score)
+      )
+      .filter((score): score is number => score !== null);
 
     const avgScore = conversationScores.length > 0
       ? conversationScores.reduce((sum, score) => sum + score, 0) / conversationScores.length
