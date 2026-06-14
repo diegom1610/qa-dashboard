@@ -50,7 +50,6 @@ export function FeedbackPanel({
   const [errorMessage, setErrorMessage] = useState('');
   const [userRole, setUserRole] = useState<string>('agent');
   const [showMentions, setShowMentions] = useState(false);
-  const [mentionSearch, setMentionSearch] = useState('');
   const [userSuggestions, setUserSuggestions] = useState<UserSuggestion[]>([]);
   const [cursorPosition, setCursorPosition] = useState(0);
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
@@ -104,7 +103,7 @@ export function FeedbackPanel({
 
         setUserSuggestions(
           filtered.slice(0, 10).map((u) => ({
-            id: u.id,
+            id: u.id ?? '',
             email: u.email || '',
             role: u.role || 'agent',
           }))
@@ -127,7 +126,6 @@ export function FeedbackPanel({
     if (atIndex !== -1) {
       const searchTerm = textBeforeCursor.slice(atIndex + 1);
       if (!searchTerm.includes(' ')) {
-        setMentionSearch(searchTerm);
         setShowMentions(true);
         fetchUsers(searchTerm);
       } else {
@@ -228,14 +226,22 @@ export function FeedbackPanel({
 
   const getAgentEmailFromConversation = async (convId: string): Promise<string | null> => {
     try {
-      const { data, error } = await supabase
-        .from('conversation_threads')
-        .select('agent_name')
+      const { data: metric, error: metricError } = await supabase
+        .from('qa_metrics')
+        .select('agent_name, agent_id')
         .eq('conversation_id', convId)
         .maybeSingle();
 
-      if (error || !data) return null;
-      return data.agent_name;
+      if (metricError || !metric) return null;
+
+      const { data: agent, error: agentError } = await supabase
+        .from('agents')
+        .select('email')
+        .eq('agent_name', metric.agent_name)
+        .maybeSingle();
+
+      if (agentError || !agent?.email) return null;
+      return agent.email;
     } catch (error) {
       console.error('Error fetching agent email:', error);
       return null;
@@ -294,7 +300,7 @@ export function FeedbackPanel({
           await supabase.functions.invoke('send-feedback-notification', {
             body: {
               agent_email: agentEmail,
-              reviewer_email: user.email,
+              reviewer_email: user?.email ?? '',
               rating: totalStars,
               feedback_text: feedbackText.trim() || null,
               conversation_id: conversationId,
@@ -321,8 +327,8 @@ export function FeedbackPanel({
             const feedbackCommentData = {
               feedback_id: feedbackData.id,
               conversation_id: conversationId,
-              commenter_id: user.id,
-              commenter_name: user.email || 'Unknown',
+              commenter_id: user?.id ?? '',
+              commenter_name: user?.email || 'Unknown',
               commenter_role: userRole,
               comment_text: feedbackText.trim(),
             };
@@ -336,7 +342,7 @@ export function FeedbackPanel({
             if (!commentError && commentData) {
               const mentionInserts = mentionedUsers.map((u) => ({
                 comment_id: commentData.id,
-                mentioned_user_id: u.id,
+                mentioned_user_id: u.id ?? '',
                 mentioned_user_email: u.email || '',
               }));
 
@@ -350,7 +356,7 @@ export function FeedbackPanel({
                     user_id: u.id,
                   })),
                   comment_text: feedbackText.trim(),
-                  commenter_name: user.email,
+                  commenter_name: user?.email ?? '',
                   conversation_id: conversationId,
                 },
               });

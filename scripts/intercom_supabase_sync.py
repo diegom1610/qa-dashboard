@@ -705,7 +705,20 @@ def sync_conversations(start_unix: int, end_unix: int, enrich: bool = True) -> i
     if not rows:
         logger.info("No conversations to process")
         return 0
-    
+
+    # TEMPORARY DIAGNOSTIC - remove after confirming AI score issue
+    logger.info(f"CSV HEADERS: {list(rows[0].keys())}")
+    ai_fields = ['ai_cx_score_rating', 'conversation_rating', 'fin_ai_agent_rating', 'ai_cx_score_explanation']
+    present = [f for f in ai_fields if f in rows[0]]
+    missing = [f for f in ai_fields if f not in rows[0]]
+    logger.info(f"AI score fields PRESENT: {present}")
+    logger.info(f"AI score fields MISSING: {missing}")
+    for i, sample_row in enumerate(rows[:3]):
+        logger.info(f"Row {i+1} AI values: " + ", ".join(
+            f"{f}={repr(sample_row.get(f, 'MISSING'))}" for f in ai_fields
+        ))
+    # END TEMPORARY DIAGNOSTIC
+
     # Step 6: Transform rows
     logger.info("Step 6: Transforming conversation data...")
     conversations = []

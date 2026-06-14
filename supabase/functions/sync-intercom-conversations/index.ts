@@ -177,6 +177,11 @@ Deno.serve(async (req: Request) => {
       .filter((row: ConversationRow) => row.conversation_id)
       .map((row: ConversationRow) => parseConversationRow(row, adminsMap));
 
+    // Summary: how many parsed rows actually have an AI score
+    const withScore = conversations.filter(c => c.ai_score !== null).length;
+    const withoutScore = conversations.length - withScore;
+    console.log(`=== AI SCORE SUMMARY: ${withScore} with score / ${withoutScore} without score (out of ${conversations.length}) ===`);
+
     // ============================================
     // CRITICAL: Enrich ALL conversations with real timestamps and tags
     // The Intercom Reporting Export API often returns incorrect or missing dates
@@ -654,6 +659,17 @@ async function parseExportBytes(content: Uint8Array): Promise<ConversationRow[]>
   if (lines.length === 0) return [];
 
   const headers = parseCSVLine(lines[0]);
+
+  // Log every column name Intercom actually returned — critical for diagnosing
+  // when fields like ai_cx_score_rating silently disappear from the export
+  console.log("=== CSV HEADERS FROM INTERCOM EXPORT ===");
+  console.log(JSON.stringify(headers));
+  const AI_SCORE_FIELDS = ["ai_cx_score_rating", "conversation_rating", "fin_ai_agent_rating", "ai_cx_score_explanation"];
+  const presentAiFields = AI_SCORE_FIELDS.filter(f => headers.includes(f));
+  const missingAiFields = AI_SCORE_FIELDS.filter(f => !headers.includes(f));
+  console.log("AI score fields present in CSV:", JSON.stringify(presentAiFields));
+  console.log("AI score fields MISSING from CSV:", JSON.stringify(missingAiFields));
+
   const rows: ConversationRow[] = [];
 
   for (let i = 1; i < lines.length; i++) {
@@ -667,6 +683,18 @@ async function parseExportBytes(content: Uint8Array): Promise<ConversationRow[]>
     });
 
     rows.push(row);
+  }
+
+  // Log a sample of raw AI score values from first 3 rows for debugging
+  if (rows.length > 0) {
+    const sample = rows.slice(0, 3).map(r => ({
+      conversation_id: r.conversation_id,
+      ai_cx_score_rating: r.ai_cx_score_rating,
+      conversation_rating: r.conversation_rating,
+      fin_ai_agent_rating: r.fin_ai_agent_rating,
+    }));
+    console.log("=== SAMPLE AI SCORE RAW VALUES (first 3 rows) ===");
+    console.log(JSON.stringify(sample));
   }
 
   return rows;
@@ -741,15 +769,31 @@ function parseConversationRow(row: ConversationRow, adminsMap: Record<string, st
     row.fin_ai_agent_rating ||
     "";
 
+  const aiScoreSource = row.ai_cx_score_rating ? "ai_cx_score_rating"
+    : row.conversation_rating ? "conversation_rating"
+    : row.fin_ai_agent_rating ? "fin_ai_agent_rating"
+    : "none";
+
   let aiScore: number | null = null;
   if (aiScoreRaw) {
-    try {
-      const scoreFloat = parseFloat(aiScoreRaw);
+    const scoreFloat = parseFloat(aiScoreRaw);
+    if (!isNaN(scoreFloat)) {
       if (scoreFloat >= 1 && scoreFloat <= 5) {
+        // Standard 1–5 scale
         aiScore = Math.round(scoreFloat * 100) / 100;
+      } else if (scoreFloat >= 0 && scoreFloat <= 10) {
+        // Intercom may return 0–10 scale — normalize to 1–5
+        aiScore = Math.round((scoreFloat / 10) * 5 * 100) / 100;
+        console.log(`  Score normalization (0-10 -> 1-5): raw=${scoreFloat} -> ${aiScore} [${row.conversation_id}]`);
+      } else if (scoreFloat > 10 && scoreFloat <= 100) {
+        // Percentage scale 0–100 — normalize to 1–5
+        aiScore = Math.round((scoreFloat / 100) * 5 * 100) / 100;
+        console.log(`  Score normalization (0-100 -> 1-5): raw=${scoreFloat} -> ${aiScore} [${row.conversation_id}]`);
+      } else {
+        console.warn(`  Unrecognised score range: raw="${aiScoreRaw}" (${scoreFloat}) from field "${aiScoreSource}" for ${row.conversation_id}`);
       }
-    } catch {
-      // Invalid score
+    } else {
+      console.warn(`  Non-numeric score value: raw="${aiScoreRaw}" from field "${aiScoreSource}" for ${row.conversation_id}`);
     }
   }
 
