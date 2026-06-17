@@ -14,11 +14,12 @@ interface FeedbackNotificationRequest {
   conversation_id: string;
 }
 
-async function sendEmail(to: string, subject: string, html: string): Promise<void> {
+async function sendEmail(to: string, subject: string, html: string, text: string): Promise<void> {
   const resendApiKey = Deno.env.get('RESEND_API_KEY');
   if (!resendApiKey) throw new Error('RESEND_API_KEY is not configured');
 
-  const fromAddress = Deno.env.get('EMAIL_FROM') || 'QA Dashboard <notifications@qadashboard-eight.vercel.app>';
+  const fromAddress = Deno.env.get('EMAIL_FROM') || 'QA Dashboard <notifications@qa-notifications.us>';
+  const appUrl = Deno.env.get('APP_URL') || 'https://qadashboard-eight.vercel.app';
 
   const res = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -26,7 +27,18 @@ async function sendEmail(to: string, subject: string, html: string): Promise<voi
       Authorization: `Bearer ${resendApiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ from: fromAddress, to, subject, html }),
+    body: JSON.stringify({
+      from: fromAddress,
+      to,
+      subject,
+      html,
+      text,
+      headers: {
+        'List-Unsubscribe': `<${appUrl}>`,
+        'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click',
+        'X-Entity-Ref-ID': `qa-feedback-${Date.now()}`,
+      },
+    }),
   });
 
   if (!res.ok) {
@@ -104,7 +116,19 @@ Deno.serve(async (req: Request) => {
       </div>
     `;
 
-    await sendEmail(agent_email, subject, html);
+    const text = [
+      `QA Dashboard — New Evaluation`,
+      ``,
+      `Conversation: ${conversation_id}`,
+      `Reviewed by: ${reviewer_email}`,
+      `Score: ${rating}/20`,
+      ``,
+      feedback_text ? `Feedback:\n${feedback_text}` : `No written feedback was provided.`,
+      ``,
+      `View your evaluation: ${Deno.env.get('APP_URL') || 'https://qadashboard-eight.vercel.app'}`,
+    ].join('\n');
+
+    await sendEmail(agent_email, subject, html, text);
     console.log('Feedback notification sent to:', agent_email);
 
     return new Response(

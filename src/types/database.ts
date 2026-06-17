@@ -57,6 +57,9 @@ export interface Database {
           workspace: string | null;
           raw_data: any;
           synced_at: string;
+          is_360_queue: boolean | null;
+          queue_type_360: string | null;
+          rating_source: string | null;
         };
         Insert: {
           id?: string;
@@ -73,6 +76,9 @@ export interface Database {
           workspace?: string | null;
           raw_data?: any;
           synced_at?: string;
+          is_360_queue?: boolean | null;
+          queue_type_360?: string | null;
+          rating_source?: string | null;
         };
         Update: {
           id?: string;
@@ -89,6 +95,9 @@ export interface Database {
           workspace?: string | null;
           raw_data?: any;
           synced_at?: string;
+          is_360_queue?: boolean | null;
+          queue_type_360?: string | null;
+          rating_source?: string | null;
         };
         Relationships: [];
       };

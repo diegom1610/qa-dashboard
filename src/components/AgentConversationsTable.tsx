@@ -3,7 +3,7 @@ import { ChevronUp, ChevronDown, ExternalLink } from 'lucide-react';
 import type { QAMetric, HumanFeedback } from '../types/database';
 import { calculateConversationScore } from '../utils/scoring';
 
-interface AgentConversationsTableProps {a
+interface AgentConversationsTableProps {
   metrics: QAMetric[];
   feedback: HumanFeedback[];
 }

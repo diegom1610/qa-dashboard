@@ -2,13 +2,14 @@ name: Sync Intercom Data to Supabase
 
 on:
   schedule:
-    - cron: '0 2 * * *'  # Daily at 2 AM UTC
+    - cron: '0 2 * * *'   # Daily at 2 AM UTC (catches overnight conversations)
+    - cron: '0 14 * * *'  # Daily at 2 PM UTC (catches morning conversations missed by lag)
   workflow_dispatch:  # Allows manual trigger from GitHub UI
     inputs:
       days:
-        description: 'Number of days to sync (default: 1)'
+        description: 'Number of days to sync (default: 2)'
         required: false
-        default: '1'
+        default: '2'
         type: string
 
 jobs:
@@ -36,7 +37,7 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: |
-          DAYS="${{ github.event.inputs.days || '1' }}"
+          DAYS="${{ github.event.inputs.days || '2' }}"
           echo "Syncing last ${DAYS} days..."
           python scripts/intercom_supabase_sync.py --days ${DAYS}
 

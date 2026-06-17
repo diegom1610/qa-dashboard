@@ -59,7 +59,9 @@ export function AgentDashboard({ viewMode, onViewModeChange }: AgentDashboardPro
       case 'yesterday': {
         const yesterday = new Date(today);
         yesterday.setDate(yesterday.getDate() - 1);
-        return { startDate: yesterday, endDate: today };
+        const endOfYesterday = new Date(today);
+        endOfYesterday.setSeconds(endOfYesterday.getSeconds() - 1); // 23:59:59 yesterday
+        return { startDate: yesterday, endDate: endOfYesterday };
       }
 
       case 'this_week': {
