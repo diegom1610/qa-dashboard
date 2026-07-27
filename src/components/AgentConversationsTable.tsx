@@ -76,6 +76,16 @@ export function AgentConversationsTable({ metrics, feedback }: AgentConversation
     return feedback.filter(f => f.conversation_id === conversationId);
   };
 
+  const getEvaluatedOnLabel = (conversationFeedback: HumanFeedback[]) => {
+    if (conversationFeedback.length === 0) return null;
+
+    // A conversation can be reviewed by more than one reviewer, each on a
+    // different date - show every evaluation date so stakeholders can see
+    // the full review history at a glance.
+    const dates = [...new Set(conversationFeedback.map(f => f.created_at))].sort();
+    return dates.map(d => formatDate(d)).join(', ');
+  };
+
   // FIXED: Timezone-safe date formatting
   // Parse the date string directly without timezone conversion
   const formatDate = (dateString: string) => {
@@ -148,6 +158,11 @@ export function AgentConversationsTable({ metrics, feedback }: AgentConversation
                   <span>Human Reviews</span>
                 </div>
               </th>
+              <th className="px-6 py-3 text-left">
+                <div className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                  <span>Evaluated On</span>
+                </div>
+              </th>
               <th
                 className="px-6 py-3 text-left cursor-pointer hover:bg-slate-100 transition"
                 onClick={() => handleSort('status')}
@@ -216,6 +231,9 @@ export function AgentConversationsTable({ metrics, feedback }: AgentConversation
                         </span>
                       )}
                     </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className="text-slate-700">{getEvaluatedOnLabel(conversationFeedback) || 'Not evaluated'}</span>
                   </td>
                   <td className="px-6 py-4">
                     <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${
