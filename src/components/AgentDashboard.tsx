@@ -37,6 +37,7 @@ export function AgentDashboard({ viewMode, onViewModeChange }: AgentDashboardPro
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
   const [showHumanReviewedOnly, setShowHumanReviewedOnly] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [dateBounds, setDateBounds] = useState<{ start: string | null; end: string | null }>({ start: null, end: null });
 
   const { user, signOut } = useAuth();
 
@@ -321,30 +322,47 @@ const applyFilters = async () => {
 
   // Apply date range filter - TIMEZONE SAFE
   const { startDate, endDate } = getDateRange();
+  let startStr: string | null = null;
+  let endStr: string | null = null;
+
   if (startDate && endDate) {
     // Extract YYYY-MM-DD using LOCAL date components (not UTC conversion)
     const startYear = startDate.getFullYear();
     const startMonth = String(startDate.getMonth() + 1).padStart(2, '0');
     const startDay = String(startDate.getDate()).padStart(2, '0');
-    const startStr = `${startYear}-${startMonth}-${startDay}`;
+    startStr = `${startYear}-${startMonth}-${startDay}`;
 
     const endYear = endDate.getFullYear();
     const endMonth = String(endDate.getMonth() + 1).padStart(2, '0');
     const endDay = String(endDate.getDate()).padStart(2, '0');
-    const endStr = `${endYear}-${endMonth}-${endDay}`;
+    endStr = `${endYear}-${endMonth}-${endDay}`;
 
     console.log('Date range:', startStr, 'to', endStr);
+  }
+
+  setDateBounds({ start: startStr, end: endStr });
+
+  if (startStr && endStr) {
+    const inRange = (dateStr: string | null | undefined) => {
+      if (!dateStr) return false;
+      const dateOnly = dateStr.substring(0, 10);
+      return dateOnly >= startStr! && dateOnly <= endStr!;
+    };
 
     const beforeCount = filtered.length;
-    
+
     filtered = filtered.filter(m => {
-      if (!m.metric_date) return false;
-      
-      // Extract just YYYY-MM-DD from metric_date (handles both formats)
-      const metricDateStr = m.metric_date.substring(0, 10);
-      
-      const inRange = metricDateStr >= startStr && metricDateStr <= endStr;
-      return inRange;
+      const metricFeedback = allFeedback.filter(f => f.conversation_id === m.conversation_id);
+
+      // Evaluated chats are reported in the month they were EVALUATED, not the
+      // month the underlying conversation took place. A conversation reviewed
+      // more than once (by different reviewers) shows up in every month it
+      // was reviewed in. Conversations with no evaluation yet fall back to
+      // the conversation date, since there's no evaluation date to bucket by.
+      if (metricFeedback.length > 0) {
+        return metricFeedback.some(f => inRange(f.created_at));
+      }
+      return inRange(m.metric_date);
     });
 
     console.log(`Date filter: ${beforeCount} -> ${filtered.length}`);
@@ -835,7 +853,16 @@ const applyFilters = async () => {
             {/* Filter feedback to only include conversations in filteredMetrics */}
             {(() => {
               const filteredConversationIds = new Set(filteredMetrics.map(m => m.conversation_id));
-              const filteredFeedback = allFeedback.filter(f => filteredConversationIds.has(f.conversation_id));
+              const filteredFeedback = allFeedback.filter(f => {
+                if (!filteredConversationIds.has(f.conversation_id)) return false;
+                // Match the evaluation-month bucketing above: only count
+                // evaluations that themselves fall within the selected range.
+                if (dateBounds.start && dateBounds.end) {
+                  const evaluatedDateStr = (f.created_at || '').substring(0, 10);
+                  return evaluatedDateStr >= dateBounds.start && evaluatedDateStr <= dateBounds.end;
+                }
+                return true;
+              });
               return (
                 <>
                   <AgentPerformanceStats metrics={filteredMetrics} feedback={filteredFeedback} />
