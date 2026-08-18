@@ -1,9 +1,10 @@
 import { useState } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginPage } from './components/LoginPage';
+import { ResetPasswordPage } from './components/ResetPasswordPage';
 import { Dashboard } from './components/Dashboard';
 import { AgentDashboard } from './components/AgentDashboard';
-import { BarChart3, Users } from 'lucide-react';
 
 type ViewMode = 'reviewer' | 'agent';
 
@@ -40,7 +41,13 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <BrowserRouter>
+        <Routes>
+          {/* Accessible without being logged in - Supabase sends users here via a recovery link */}
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="*" element={<AppContent />} />
+        </Routes>
+      </BrowserRouter>
     </AuthProvider>
   );
 }
