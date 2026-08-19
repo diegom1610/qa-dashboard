@@ -21,13 +21,24 @@ export function ResetPasswordPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [validLink, setValidLink] = useState<boolean | null>(null);
+  const [linkError, setLinkError] = useState('');
   const navigate = useNavigate();
 
   useEffect(() => {
     // The recovery link Supabase sends looks like:
     // https://.../reset-password#access_token=...&type=recovery&refresh_token=...
-    const hash = window.location.hash;
-    if (hash.includes('access_token') && hash.includes('type=recovery')) {
+    // An expired/already-used link instead comes back as an error hash:
+    // https://.../reset-password#error=access_denied&error_description=...
+    const params = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+
+    if (params.get('error') || params.get('error_description')) {
+      const description = params.get('error_description')?.replace(/\+/g, ' ').replace(/\.?$/, '.');
+      setLinkError(description || 'This password reset link is invalid or has expired.');
+      setValidLink(false);
+      return;
+    }
+
+    if (params.get('access_token') && params.get('type') === 'recovery') {
       setValidLink(true);
       return;
     }
@@ -112,7 +123,7 @@ export function ResetPasswordPage() {
           </div>
         ) : validLink === false ? (
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm text-center">
-            This password reset link is invalid or has expired. Please request a new one.
+            {linkError || 'This password reset link is invalid or has expired.'} Please request a new one.
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">

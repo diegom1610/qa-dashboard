@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { LoginPage } from './components/LoginPage';
 import { ResetPasswordPage } from './components/ResetPasswordPage';
@@ -11,6 +11,17 @@ type ViewMode = 'reviewer' | 'agent';
 function AppContent() {
   const { user, loading } = useAuth();
   const [viewMode, setViewMode] = useState<ViewMode>('reviewer');
+  const location = useLocation();
+
+  // Supabase's recovery link redirects to whatever "Site URL" is configured
+  // for the project, which may not be /reset-password (e.g. a recovery email
+  // sent manually from the Supabase dashboard has no way to request a
+  // specific redirect). If the recovery hash lands anywhere else, forward it
+  // to the page that knows how to use it instead of losing the token behind
+  // the login screen.
+  if (location.hash.includes('type=recovery') || location.hash.includes('error_description')) {
+    return <Navigate to={`/reset-password${location.hash}`} replace />;
+  }
 
   if (loading) {
     return (
