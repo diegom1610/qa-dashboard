@@ -58,9 +58,16 @@ export function FeedbackPanel({
 
   const [selectedEvaluatedAgent, setSelectedEvaluatedAgent] = useState<string>('');
 
+  // The agent the chat is assigned to (from qa_metrics) must always be selectable.
+  // Intercom participants only include agents who wrote in the thread, so the
+  // assigned agent can be missing; without it the <select> would display the
+  // first participant while the state still held agentName, and the review
+  // would be saved for a different agent than the one shown.
+  const agentOptions = [...new Set([agentName, ...(participants ?? [])].filter(Boolean))];
+
   useEffect(() => {
     setSelectedEvaluatedAgent(agentName);
-  }, [agentName]);
+  }, [agentName, conversationId]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const { submitFeedback, feedback } = useFeedback(conversationId);
@@ -466,7 +473,7 @@ export function FeedbackPanel({
       </h3>
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {participants && participants.length > 0 && (
+        {agentOptions.length > 1 && (
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Evaluating Agent <span className="text-red-500">*</span>
@@ -476,7 +483,7 @@ export function FeedbackPanel({
               onChange={(e) => setSelectedEvaluatedAgent(e.target.value)}
               className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition bg-white"
             >
-              {participants.map((name) => (
+              {agentOptions.map((name) => (
                 <option key={name} value={name}>
                   {name}
                 </option>
