@@ -863,9 +863,30 @@ const applyFilters = async () => {
                 }
                 return true;
               });
+
+              // The top stats describe the selected reviewee(s) only. A conversation
+              // owned by one agent may have been evaluated for another agent via the
+              // "evaluated agent" dropdown, so attribute each review the same way the
+              // Reviewee performance table does and drop reviews for other agents.
+              let statsMetrics = filteredMetrics;
+              let statsFeedback = filteredFeedback;
+              if (selectedReviewees.length > 0) {
+                const metricAgentById = new Map(filteredMetrics.map(m => [m.conversation_id, m.agent_name]));
+                statsFeedback = filteredFeedback.filter(f => {
+                  const attributedAgent = f.evaluated_agent_name ?? metricAgentById.get(f.conversation_id);
+                  return !!attributedAgent && selectedReviewees.includes(attributedAgent);
+                });
+                const reviewedIds = new Set(filteredFeedback.map(f => f.conversation_id));
+                const statsReviewedIds = new Set(statsFeedback.map(f => f.conversation_id));
+                statsMetrics = filteredMetrics.filter(m =>
+                  statsReviewedIds.has(m.conversation_id) ||
+                  (!reviewedIds.has(m.conversation_id) && selectedReviewees.includes(m.agent_name))
+                );
+              }
+
               return (
                 <>
-                  <AgentPerformanceStats metrics={filteredMetrics} feedback={filteredFeedback} />
+                  <AgentPerformanceStats metrics={statsMetrics} feedback={statsFeedback} />
                   <AgentPerformanceTable metrics={filteredMetrics} feedback={filteredFeedback} />
                   <div className="mt-6"> 
                     <AgentConversationsTable metrics={filteredMetrics} feedback={filteredFeedback} />
