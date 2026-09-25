@@ -41,6 +41,7 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
   const [uploadedImages, setUploadedImages] = useState<File[]>([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
   const [commentImages, setCommentImages] = useState<Record<string, { url: string; file_name: string }[]>>({});
+  const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     fetchComments();
@@ -103,14 +104,19 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
         if (imgData && imgData.length > 0) {
           const imageMap: Record<string, { url: string; file_name: string }[]> = {};
 
-          imgData.forEach((img) => {
-            const { data: urlData } = supabase.storage
-              .from('feedback_images')
-              .getPublicUrl(img.storage_path);
+          // Signed URLs work whether the bucket is public or private; public URLs
+          // return "Bucket not found" when the bucket is private.
+          const { data: signedData, error: signError } = await supabase.storage
+            .from('feedback_images')
+            .createSignedUrls(imgData.map((img) => img.storage_path), 60 * 60);
 
-            if (urlData?.publicUrl) {
+          if (signError) console.error('Error signing image URLs:', signError);
+
+          imgData.forEach((img, i) => {
+            const url = signedData?.[i]?.signedUrl;
+            if (url) {
               if (!imageMap[img.comment_id]) imageMap[img.comment_id] = [];
-              imageMap[img.comment_id].push({ url: urlData.publicUrl, file_name: img.file_name });
+              imageMap[img.comment_id].push({ url, file_name: img.file_name });
             }
           });
 
@@ -206,21 +212,53 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
     return mentions;
   };
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
+  const addImages = (files: File[]) => {
     const imageFiles = files.filter(file => file.type.startsWith('image/'));
+    if (imageFiles.length === 0) return;
 
-    if (imageFiles.length > 0) {
-      setUploadedImages(prev => [...prev, ...imageFiles]);
+    setUploadedImages(prev => [...prev, ...imageFiles]);
 
-      imageFiles.forEach(file => {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setImagePreviewUrls(prev => [...prev, reader.result as string]);
-        };
-        reader.readAsDataURL(file);
-      });
+    imageFiles.forEach(file => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreviewUrls(prev => [...prev, reader.result as string]);
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    addImages(Array.from(e.target.files || []));
+    e.target.value = '';
+  };
+
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const pastedImages = Array.from(e.clipboardData.items)
+      .filter(item => item.kind === 'file' && item.type.startsWith('image/'))
+      .map(item => item.getAsFile())
+      .filter((file): file is File => file !== null);
+
+    if (pastedImages.length > 0) {
+      e.preventDefault();
+      addImages(pastedImages);
     }
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    if (Array.from(e.dataTransfer.types).includes('Files')) {
+      e.preventDefault();
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    addImages(Array.from(e.dataTransfer.files));
   };
 
   const removeImage = (index: number) => {
@@ -228,23 +266,27 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
     setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
   };
 
-  const uploadImages = async (commentId: string): Promise<void> => {
-    if (uploadedImages.length === 0) return;
+  // Returns the number of images that failed to upload.
+  const uploadImages = async (commentId: string): Promise<number> => {
+    if (!user || uploadedImages.length === 0) return 0;
 
+    let failed = 0;
     for (const file of uploadedImages) {
-      const fileExt = file.name.split('.').pop();
+      // Pasted screenshots may have no usable file name, so fall back to the MIME type
+      const fileExt = file.name.includes('.') ? file.name.split('.').pop() : file.type.split('/')[1] || 'png';
       const fileName = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
 
       const { error: uploadError } = await supabase.storage
         .from('feedback_images')
-        .upload(fileName, file);
+        .upload(fileName, file, { contentType: file.type });
 
       if (uploadError) {
         console.error('Error uploading image:', uploadError);
+        failed++;
         continue;
       }
 
-      await supabase.from('feedback_images').insert({
+      const { error: insertError } = await supabase.from('feedback_images').insert({
         comment_id: commentId,
         conversation_id: conversationId,
         uploaded_by: user.id,
@@ -253,11 +295,17 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
         file_size: file.size,
         mime_type: file.type,
       });
+
+      if (insertError) {
+        console.error('Error saving image record:', insertError);
+        failed++;
+      }
     }
+    return failed;
   };
 
   const handleSubmit = async () => {
-    if (!newComment.trim() || !user) return;
+    if ((!newComment.trim() && uploadedImages.length === 0) || !user) return;
 
     setSubmitting(true);
     try {
@@ -276,7 +324,10 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
 
       if (commentError) throw commentError;
 
-      await uploadImages(commentData.id);
+      const failedUploads = await uploadImages(commentData.id);
+      if (failedUploads > 0) {
+        alert(`${failedUploads} image(s) could not be uploaded. The comment was posted without them.`);
+      }
 
       const mentions = extractMentions(newComment);
 
@@ -433,14 +484,22 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
             </div>
           )}
 
-          <div className="relative">
+          <div
+            className="relative"
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
             <textarea
               ref={textareaRef}
               value={newComment}
               onChange={handleTextChange}
-              placeholder="Add a comment... Use @ to mention someone"
+              onPaste={handlePaste}
+              placeholder="Add a comment... Use @ to mention someone. Paste or drop screenshots here."
               rows={3}
-              className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition resize-none text-sm"
+              className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition resize-none text-sm ${
+                isDragging ? 'border-blue-500 border-dashed bg-blue-50' : 'border-slate-300'
+              }`}
             />
 
             {showMentions && userSuggestions.length > 0 && (
@@ -510,7 +569,7 @@ export function FeedbackComments({ feedbackId, conversationId }: FeedbackComment
               </p>
               <button
                 onClick={handleSubmit}
-                disabled={submitting || !newComment.trim()}
+                disabled={submitting || (!newComment.trim() && uploadedImages.length === 0)}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition text-sm font-medium"
               >
                 {submitting ? (

@@ -212,14 +212,19 @@ export function FeedbackPanel({
     setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
   };
 
-  const uploadImages = async (feedbackId: string): Promise<void> => {
-    if (!user || uploadedImages.length === 0) return;
+  // Returns the number of images that failed to upload.
+  const uploadImages = async (feedbackId: string): Promise<number> => {
+    if (!user || uploadedImages.length === 0) return 0;
+    let failed = 0;
     for (const file of uploadedImages) {
-      const ext = file.name.split('.').pop();
+      // Pasted screenshots may have no usable file name, so fall back to the MIME type
+      const ext = file.name.includes('.') ? file.name.split('.').pop() : file.type.split('/')[1] || 'png';
       const path = `${user.id}/${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
-      const { error: uploadError } = await supabase.storage.from('feedback_images').upload(path, file);
-      if (uploadError) { console.error('Image upload error:', uploadError); continue; }
-      await supabase.from('feedback_images').insert({
+      const { error: uploadError } = await supabase.storage
+        .from('feedback_images')
+        .upload(path, file, { contentType: file.type });
+      if (uploadError) { console.error('Image upload error:', uploadError); failed++; continue; }
+      const { error: insertError } = await supabase.from('feedback_images').insert({
         comment_id: feedbackId,
         conversation_id: conversationId,
         uploaded_by: user.id,
@@ -228,7 +233,12 @@ export function FeedbackPanel({
         file_size: file.size,
         mime_type: file.type,
       });
+      if (insertError) { console.error('Image record error:', insertError); failed++; }
     }
+    // The review shows up in FeedbackHistory (via Realtime) before its images are
+    // saved, so tell it to reload the images now that the uploads are done.
+    window.dispatchEvent(new CustomEvent('feedback-images-updated', { detail: { conversationId } }));
+    return failed;
   };
 
   const getAgentEmailFromConversation = async (convId: string): Promise<string | null> => {
@@ -299,7 +309,10 @@ export function FeedbackPanel({
         evaluated_agent_name: selectedEvaluatedAgent || agentName,
       });
 
-      await uploadImages(feedbackData.id);
+      const failedUploads = await uploadImages(feedbackData.id);
+      if (failedUploads > 0) {
+        alert(`${failedUploads} image(s) could not be uploaded. The review was saved without them.`);
+      }
 
       const agentEmail = await getAgentEmailFromConversation(conversationId);
       if (agentEmail) {

@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Star, Trash2, Edit, Save, X, Clock } from 'lucide-react';
 import { useFeedback } from '../hooks/useFeedback';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 import { FeedbackComments } from './FeedbackComments';
 import type { HumanFeedback } from '../types/database';
 
@@ -44,6 +45,61 @@ export function FeedbackHistory({ conversationId }: FeedbackHistoryProps) {
   const { feedback, loading, updateFeedback, deleteFeedback } =
     useFeedback(conversationId);
   const { user } = useAuth();
+  const [reviewImages, setReviewImages] = useState<Record<string, { url: string; file_name: string }[]>>({});
+
+  // Images attached in the evaluation form are stored in feedback_images with
+  // comment_id = human_feedback.id.
+  const feedbackIdsKey = feedback.map((f) => f.id).join(',');
+
+  useEffect(() => {
+    const fetchReviewImages = async () => {
+      const feedbackIds = feedbackIdsKey ? feedbackIdsKey.split(',') : [];
+      if (feedbackIds.length === 0) {
+        setReviewImages({});
+        return;
+      }
+
+      const { data: imgData, error } = await supabase
+        .from('feedback_images')
+        .select('comment_id, storage_path, file_name')
+        .in('comment_id', feedbackIds);
+
+      if (error) {
+        console.error('Error fetching review images:', error);
+        return;
+      }
+      if (!imgData || imgData.length === 0) {
+        setReviewImages({});
+        return;
+      }
+
+      const { data: signedData, error: signError } = await supabase.storage
+        .from('feedback_images')
+        .createSignedUrls(imgData.map((img) => img.storage_path), 60 * 60);
+
+      if (signError) console.error('Error signing review image URLs:', signError);
+
+      const imageMap: Record<string, { url: string; file_name: string }[]> = {};
+      imgData.forEach((img, i) => {
+        const url = signedData?.[i]?.signedUrl;
+        if (url) {
+          if (!imageMap[img.comment_id]) imageMap[img.comment_id] = [];
+          imageMap[img.comment_id].push({ url, file_name: img.file_name });
+        }
+      });
+      setReviewImages(imageMap);
+    };
+
+    fetchReviewImages();
+
+    const handleImagesUpdated = (e: Event) => {
+      if ((e as CustomEvent<{ conversationId: string }>).detail?.conversationId === conversationId) {
+        fetchReviewImages();
+      }
+    };
+    window.addEventListener('feedback-images-updated', handleImagesUpdated);
+    return () => window.removeEventListener('feedback-images-updated', handleImagesUpdated);
+  }, [feedbackIdsKey, conversationId]);
 
   const startEditing = (item: HumanFeedback) => {
     setEditingId(item.id);
@@ -330,6 +386,26 @@ export function FeedbackHistory({ conversationId }: FeedbackHistoryProps) {
                   <p className="text-sm text-slate-700 whitespace-pre-wrap mb-3">
                     {item.feedback_text}
                   </p>
+                )}
+
+                {reviewImages[item.id] && reviewImages[item.id].length > 0 && (
+                  <div className="mb-3 grid grid-cols-3 gap-2">
+                    {reviewImages[item.id].map((img, idx) => (
+                      <a
+                        key={idx}
+                        href={img.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={img.file_name}
+                      >
+                        <img
+                          src={img.url}
+                          alt={img.file_name}
+                          className="w-full h-24 object-cover rounded-lg border border-slate-200 hover:opacity-90 transition cursor-pointer"
+                        />
+                      </a>
+                    ))}
+                  </div>
                 )}
 
                 <FeedbackComments
